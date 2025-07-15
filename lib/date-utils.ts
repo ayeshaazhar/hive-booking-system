@@ -1,47 +1,40 @@
-export const formatDateForStorage = (date: Date): string => {
+// Utility functions for proper date handling without timezone issues
+
+export function formatDateForStorage(date: Date): string {
+  // Get local date components to avoid timezone conversion
   const year = date.getFullYear()
-  const month = (date.getMonth() + 1).toString().padStart(2, "0")
-  const day = date.getDate().toString().padStart(2, "0")
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
 }
 
-export const parseStoredDate = (dateString: string): Date => {
+export function parseStoredDate(dateString: string): Date {
+  // Parse date string as local date to avoid timezone issues
   const [year, month, day] = dateString.split("-").map(Number)
-  // Use UTC to avoid timezone issues when creating the date object
-  return new Date(Date.UTC(year, month - 1, day))
+  return new Date(year, month - 1, day)
 }
 
-export const formatDateForDisplay = (dateString: string): string => {
+export function formatDateForDisplay(dateString: string): string {
   const date = parseStoredDate(dateString)
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
+  return date.toLocaleDateString()
 }
 
-export const isToday = (dateString: string): boolean => {
+export function isToday(dateString: string): boolean {
   const today = new Date()
-  const date = parseStoredDate(dateString)
-  return (
-    date.getUTCFullYear() === today.getFullYear() &&
-    date.getUTCMonth() === today.getMonth() &&
-    date.getUTCDate() === today.getDate()
-  )
+  const todayString = formatDateForStorage(today)
+  return dateString === todayString
 }
 
-export const isFutureDate = (dateString: string): boolean => {
+export function isFutureDate(dateString: string): boolean {
   const today = new Date()
-  today.setHours(0, 0, 0, 0) // Normalize today to start of day
-  const date = parseStoredDate(dateString)
-  return date.getTime() > today.getTime()
+  const todayString = formatDateForStorage(today)
+  return dateString > todayString
 }
 
-export const isPastDate = (dateString: string): boolean => {
+export function isPastDate(dateString: string): boolean {
   const today = new Date()
-  today.setHours(0, 0, 0, 0) // Normalize today to start of day
-  const date = parseStoredDate(dateString)
-  return date.getTime() < today.getTime()
+  const todayString = formatDateForStorage(today)
+  return dateString < todayString
 }
 
 // Helper function to parse time and convert to minutes since midnight

@@ -1,30 +1,25 @@
 import type React from "react"
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
-import "./globals.css"
 import { Providers } from "./providers"
-import { ErrorBoundary } from "@/components/error-boundary"
+import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Hive Member Portal",
-  description: "Manage your bookings and resources at Hive.",
+  title: "Hive Booking System",
+  description: "Book meeting rooms, phone booths, and shared resources at Hive",
 }
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode
-}>) {
+}) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en">
       <body className={inter.className}>
-        <ErrorBoundary>
-          <Providers attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-            {children}
-          </Providers>
-        </ErrorBoundary>
+        <Providers>{children}</Providers>
       </body>
     </html>
   )

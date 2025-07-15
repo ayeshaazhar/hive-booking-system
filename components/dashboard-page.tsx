@@ -5,34 +5,37 @@ import { useBookings } from "@/contexts/booking-context"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Calendar, Phone, Users, Clock, Plus, Loader2 } from "lucide-react"
+import { Calendar, Phone, Users, Clock, Plus } from "lucide-react"
 import Link from "next/link"
 import { Navigation } from "./navigation"
-import { useAdminData } from "@/contexts/admin-data-context"
-import { isToday, formatDateForDisplay, timeToMinutes } from "@/lib/date-utils"
+import { formatDateForDisplay, isToday } from "@/lib/date-utils"
+
+// Resource counts for availability display
+const resourceCounts = {
+  "meeting-room": 3,
+  "phone-booth": 2,
+  resources: 2,
+}
 
 export function DashboardPage() {
   const { user } = useAuth()
-  const { getUpcomingBookings, bookings, isLoaded: bookingsLoaded } = useBookings()
-  const { resources, isLoaded: adminDataLoaded } = useAdminData()
-
-  const isDataLoaded = bookingsLoaded && adminDataLoaded
+  const { getUpcomingBookings, bookings, isLoaded } = useBookings()
 
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-32 w-32 animate-spin border-b-2 border-orange-500" />
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-500"></div>
       </div>
     )
   }
 
-  if (!isDataLoaded) {
+  if (!isLoaded) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Navigation />
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
             <span className="ml-2">Loading dashboard...</span>
           </div>
         </main>
@@ -45,24 +48,21 @@ export function DashboardPage() {
 
   // Calculate availability based on current bookings
   const getAvailableCount = (type: string) => {
-    const now = new Date()
-    const currentTimeInMinutes = now.getHours() * 60 + now.getMinutes()
+    const today = new Date()
+    const currentHour = today.getHours()
 
-    const relevantResources = resources.filter(
-      (r) => r.type.toLowerCase().includes(type.split("-")[0]) && r.status === "available",
-    )
-
-    const currentlyBookedCount = bookings.filter(
+    // Count bookings for today that are currently active
+    const activeBookings = bookings.filter(
       (booking) =>
         isToday(booking.date) &&
         booking.status === "confirmed" &&
         booking.type.toLowerCase().includes(type.split("-")[0]) &&
-        // Check if the current time falls within the booking slot
-        currentTimeInMinutes >= timeToMinutes(booking.startTime) &&
-        currentTimeInMinutes < timeToMinutes(booking.endTime),
-    ).length
+        // Simple check if booking is currently active (you can make this more sophisticated)
+        currentHour >= 9 &&
+        currentHour <= 18,
+    )
 
-    return Math.max(0, relevantResources.length - currentlyBookedCount)
+    return Math.max(0, resourceCounts[type as keyof typeof resourceCounts] - activeBookings.length)
   }
 
   return (
@@ -81,7 +81,7 @@ export function DashboardPage() {
         {/* Quick Actions */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <Link href="/book?type=Meeting Room">
+            <Link href="/book?type=meeting-room">
               <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                 <Users className="h-8 w-8 text-blue-600" />
                 <div className="ml-4">
@@ -102,7 +102,7 @@ export function DashboardPage() {
           </Card>
 
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <Link href="/book?type=Phone Booth">
+            <Link href="/book?type=phone-booth">
               <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                 <Phone className="h-8 w-8 text-green-600" />
                 <div className="ml-4">
@@ -123,17 +123,17 @@ export function DashboardPage() {
           </Card>
 
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
-            <Link href="/book?type=Other">
+            <Link href="/book?type=resources">
               <CardHeader className="flex flex-row items-center space-y-0 pb-2">
                 <Calendar className="h-8 w-8 text-purple-600" />
                 <div className="ml-4">
-                  <CardTitle className="text-lg">Other Resources</CardTitle>
+                  <CardTitle className="text-lg">Resources</CardTitle>
                   <CardDescription>Projectors, whiteboards & more</CardDescription>
                 </div>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-500">{getAvailableCount("other")} available</span>
+                  <span className="text-sm text-gray-500">{getAvailableCount("resources")} available</span>
                   <Button size="sm">
                     <Plus className="h-4 w-4 mr-1" />
                     Book Now
