@@ -553,7 +553,7 @@ export function BookingSystem() {
                 <div className="pt-4 border-t">
                   <h4 className="font-medium mb-2">Amenities Included:</h4>
                   <div className="flex flex-wrap gap-2">
-                    {selectedResource.amenities.map((amenity: string) => (
+                    {selectedResource.amenities.map((amenity:string) => (
                       <Badge key={amenity} variant="outline" className="text-xs">
                         {amenity}
                       </Badge>

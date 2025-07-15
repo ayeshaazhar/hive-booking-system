@@ -1,486 +1,327 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Button } from "@/components/ui/button"
+import { PlusCircle, Edit, Trash2, CheckCircle, XCircle, MoreHorizontal } from "lucide-react"
+import { useAdminData, type Member, type Resource } from "@/contexts/admin-data-context"
+import { useBooking, type Booking } from "@/contexts/booking-context"
+import { MemberFormDialog } from "@/components/member-form-dialog"
+import { ResourceFormDialog } from "@/components/resource-form-dialog"
+import { formatTimeForDisplay } from "@/lib/date-utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  Users,
-  Calendar,
-  TrendingUp,
-  MoreHorizontal,
-  Plus,
-  Search,
-  Filter,
-  Download,
-  UserPlus,
-  Building2,
-} from "lucide-react"
-import { Navigation } from "./navigation"
-
-const bookingStats = [
-  { title: "Total Bookings Today", value: "24", change: "+12%", icon: Calendar },
-  { title: "Active Members", value: "156", change: "+5%", icon: Users },
-  { title: "Room Utilization", value: "78%", change: "+8%", icon: TrendingUp },
-  { title: "Available Resources", value: "12", change: "0%", icon: Building2 },
-]
-
-const recentBookings = [
-  {
-    id: 1,
-    member: "Sarah Johnson",
-    resource: "Conference Room A",
-    date: "2024-12-10",
-    time: "2:00 PM - 3:00 PM",
-    status: "confirmed",
-    purpose: "Team meeting",
-  },
-  {
-    id: 2,
-    member: "Mike Chen",
-    resource: "Phone Booth 2",
-    date: "2024-12-10",
-    time: "3:30 PM - 4:00 PM",
-    status: "pending",
-    purpose: "Client call",
-  },
-  {
-    id: 3,
-    member: "Emily Davis",
-    resource: "Huddle Room B",
-    date: "2024-12-10",
-    time: "4:00 PM - 5:00 PM",
-    status: "confirmed",
-    purpose: "Project review",
-  },
-]
-
-const members = [
-  {
-    id: 1,
-    name: "Sarah Johnson",
-    email: "sarah@company.com",
-    company: "Tech Innovations",
-    joinDate: "2024-01-15",
-    totalBookings: 47,
-    status: "active",
-  },
-  {
-    id: 2,
-    name: "Mike Chen",
-    email: "mike@company.com",
-    company: "Design Studio",
-    joinDate: "2024-02-20",
-    totalBookings: 32,
-    status: "active",
-  },
-  {
-    id: 3,
-    name: "Emily Davis",
-    email: "emily@company.com",
-    company: "Marketing Pro",
-    joinDate: "2024-03-10",
-    totalBookings: 28,
-    status: "inactive",
-  },
-]
-
-const resources = [
-  {
-    id: 1,
-    name: "Conference Room A",
-    type: "Meeting Room",
-    capacity: 12,
-    status: "available",
-    bookingsToday: 6,
-    utilization: "75%",
-  },
-  {
-    id: 2,
-    name: "Phone Booth 1",
-    type: "Phone Booth",
-    capacity: 1,
-    status: "occupied",
-    bookingsToday: 8,
-    utilization: "90%",
-  },
-  {
-    id: 3,
-    name: "Huddle Room B",
-    type: "Meeting Room",
-    capacity: 6,
-    status: "available",
-    bookingsToday: 4,
-    utilization: "50%",
-  },
-]
 
 export function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState("overview")
+  const {
+    members,
+    resources,
+    addMember,
+    updateMember,
+    deleteMember,
+    addResource,
+    updateResource,
+    deleteResource,
+    isLoaded: adminDataLoaded,
+  } = useAdminData()
+  const { bookings, updateBooking, deleteBooking, getBookingDetails, isLoaded: bookingDataLoaded } = useBooking()
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "confirmed":
-      case "active":
-      case "available":
-        return "default"
-      case "pending":
-        return "secondary"
-      case "cancelled":
-      case "inactive":
-        return "destructive"
-      case "occupied":
-        return "outline"
-      default:
-        return "secondary"
+  const [isMemberDialogOpen, setIsMemberDialogOpen] = useState(false)
+  const [editingMember, setEditingMember] = useState<Member | undefined>(undefined)
+  const [isResourceDialogOpen, setIsResourceDialogOpen] = useState(false)
+  const [editingResource, setEditingResource] = useState<Resource | undefined>(undefined)
+
+  if (!adminDataLoaded || !bookingDataLoaded) {
+    return <div className="p-4 text-center">Loading admin data...</div>
+  }
+
+  const handleAddMember = () => {
+    setEditingMember(undefined)
+    setIsMemberDialogOpen(true)
+  }
+
+  const handleEditMember = (member: Member) => {
+    setEditingMember(member)
+    setIsMemberDialogOpen(true)
+  }
+
+  const handleSaveMember = (
+    memberData: Omit<Member, "id" | "joinDate" | "totalBookings" | "status" | "role"> | Member,
+  ) => {
+    if ((memberData as Member).id) {
+      updateMember((memberData as Member).id, memberData as Partial<Member>)
+    } else {
+      addMember(memberData as Omit<Member, "id" | "joinDate" | "totalBookings" | "status" | "role">)
     }
   }
 
+  const handleAddResource = () => {
+    setEditingResource(undefined)
+    setIsResourceDialogOpen(true)
+  }
+
+  const handleEditResource = (resource: Resource) => {
+    setEditingResource(resource)
+    setIsResourceDialogOpen(true)
+  }
+
+  const handleSaveResource = (resourceData: Omit<Resource, "id" | "status"> | Resource) => {
+    if ((resourceData as Resource).id) {
+      updateResource((resourceData as Resource).id, resourceData as Partial<Resource>)
+    } else {
+      addResource(resourceData as Omit<Resource, "id" | "status">)
+    }
+  }
+
+  const handleUpdateBookingStatus = (bookingId: string, status: Booking["status"]) => {
+    updateBooking(bookingId, { status })
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navigation />
+    <div className="flex flex-col gap-4 p-4 md:gap-8 md:p-6">
+      <h1 className="text-2xl font-bold">Admin Dashboard</h1>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600 mt-2">Manage bookings, members, and resources</p>
-        </div>
+      <Tabs defaultValue="bookings" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="bookings">Bookings</TabsTrigger>
+          <TabsTrigger value="members">Members</TabsTrigger>
+          <TabsTrigger value="resources">Resources</TabsTrigger>
+        </TabsList>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="bookings">Bookings</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
-            <TabsTrigger value="resources">Resources</TabsTrigger>
-          </TabsList>
-
-          {/* Overview Tab */}
-          <TabsContent value="overview" className="mt-6">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              {bookingStats.map((stat) => {
-                const Icon = stat.icon
-                return (
-                  <Card key={stat.title}>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">{stat.title}</CardTitle>
-                      <Icon className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{stat.value}</div>
-                      <p className="text-xs text-muted-foreground">{stat.change} from last month</p>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-
-            {/* Recent Activity */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Bookings</CardTitle>
-                <CardDescription>Latest booking activity across all resources</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
+        <TabsContent value="bookings">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">All Bookings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Resource</TableHead>
+                    <TableHead>Member</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {bookings.length === 0 ? (
                     <TableRow>
-                      <TableHead>Member</TableHead>
-                      <TableHead>Resource</TableHead>
-                      <TableHead>Date & Time</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Purpose</TableHead>
-                      <TableHead></TableHead>
+                      <TableCell colSpan={5} className="text-center py-4">
+                        No bookings found.
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentBookings.map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell className="font-medium">{booking.member}</TableCell>
-                        <TableCell>{booking.resource}</TableCell>
-                        <TableCell>
-                          <div>
-                            <div>{new Date(booking.date).toLocaleDateString()}</div>
-                            <div className="text-sm text-gray-500">{booking.time}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusColor(booking.status)}>{booking.status}</Badge>
-                        </TableCell>
-                        <TableCell>{booking.purpose}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>Approve</DropdownMenuItem>
-                              <DropdownMenuItem>Edit</DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">Cancel</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  ) : (
+                    bookings.map((booking) => {
+                      const { resource, member } = getBookingDetails(booking)
+                      return (
+                        <TableRow key={booking.id}>
+                          <TableCell className="font-medium">{resource?.name || "N/A"}</TableCell>
+                          <TableCell>{member?.name || "N/A"}</TableCell>
+                          <TableCell>
+                            {formatTimeForDisplay(booking.startTime)} - {formatTimeForDisplay(booking.endTime)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={
+                                booking.status === "confirmed"
+                                  ? "default"
+                                  : booking.status === "pending"
+                                    ? "secondary"
+                                    : "destructive"
+                              }
+                            >
+                              {booking.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" className="h-8 w-8 p-0">
+                                  <span className="sr-only">Open menu</span>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {booking.status === "pending" && (
+                                  <DropdownMenuItem onClick={() => handleUpdateBookingStatus(booking.id, "confirmed")}>
+                                    <CheckCircle className="mr-2 h-4 w-4" /> Confirm
+                                  </DropdownMenuItem>
+                                )}
+                                {booking.status !== "cancelled" && (
+                                  <DropdownMenuItem onClick={() => handleUpdateBookingStatus(booking.id, "cancelled")}>
+                                    <XCircle className="mr-2 h-4 w-4" /> Cancel
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={() => deleteBooking(booking.id)}>
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          {/* Bookings Tab */}
-          <TabsContent value="bookings" className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>All Bookings</CardTitle>
-                    <CardDescription>Manage all member bookings</CardDescription>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="sm">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button>
-                    <Button variant="outline" size="sm">
-                      <Download className="h-4 w-4 mr-2" />
-                      Export
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center space-x-2 mb-4">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input placeholder="Search bookings..." className="pl-10" />
-                  </div>
-                  <Select defaultValue="all">
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="confirmed">Confirmed</SelectItem>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Table>
-                  <TableHeader>
+        <TabsContent value="members">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">All Members</CardTitle>
+              <Button size="sm" onClick={handleAddMember}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Member
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {members.length === 0 ? (
                     <TableRow>
-                      <TableHead>Member</TableHead>
-                      <TableHead>Resource</TableHead>
-                      <TableHead>Date & Time</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Purpose</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableCell colSpan={6} className="text-center py-4">
+                        No members found.
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentBookings.map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell className="font-medium">{booking.member}</TableCell>
-                        <TableCell>{booking.resource}</TableCell>
-                        <TableCell>
-                          <div>
-                            <div>{new Date(booking.date).toLocaleDateString()}</div>
-                            <div className="text-sm text-gray-500">{booking.time}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={getStatusColor(booking.status)}>{booking.status}</Badge>
-                        </TableCell>
-                        <TableCell>{booking.purpose}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <Button size="sm" variant="outline">
-                              Approve
-                            </Button>
-                            <Button size="sm" variant="ghost">
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="ghost" className="text-red-600">
-                              Cancel
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Members Tab */}
-          <TabsContent value="members" className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Member Management</CardTitle>
-                    <CardDescription>Manage Hive members and their access</CardDescription>
-                  </div>
-                  <Button>
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Invite Member
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center space-x-2 mb-4">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input placeholder="Search members..." className="pl-10" />
-                  </div>
-                  <Select defaultValue="all">
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Members</SelectItem>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Company</TableHead>
-                      <TableHead>Join Date</TableHead>
-                      <TableHead>Bookings</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {members.map((member) => (
+                  ) : (
+                    members.map((member) => (
                       <TableRow key={member.id}>
-                        <TableCell className="font-medium">{member.name}</TableCell>
+                        <TableCell className="font-medium flex items-center gap-2">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={member.image || "/placeholder.svg"} alt={member.name} />
+                            <AvatarFallback>{member.name.charAt(0)}</AvatarFallback>
+                          </Avatar>
+                          {member.name}
+                        </TableCell>
                         <TableCell>{member.email}</TableCell>
                         <TableCell>{member.company}</TableCell>
-                        <TableCell>{new Date(member.joinDate).toLocaleDateString()}</TableCell>
-                        <TableCell>{member.totalBookings}</TableCell>
+                        <TableCell>{member.role}</TableCell>
                         <TableCell>
-                          <Badge variant={getStatusColor(member.status)}>{member.status}</Badge>
+                          <Badge
+                            variant={
+                              member.status === "active"
+                                ? "default"
+                                : member.status === "inactive"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {member.status}
+                          </Badge>
                         </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>View Profile</DropdownMenuItem>
-                              <DropdownMenuItem>Reset Password</DropdownMenuItem>
-                              <DropdownMenuItem>
-                                {member.status === "active" ? "Deactivate" : "Activate"}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">Remove</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditMember(member)}>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit member</span>
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteMember(member.id)}>
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete member</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          <MemberFormDialog
+            open={isMemberDialogOpen}
+            onOpenChange={setIsMemberDialogOpen}
+            member={editingMember}
+            onSave={handleSaveMember}
+          />
+        </TabsContent>
 
-          {/* Resources Tab */}
-          <TabsContent value="resources" className="mt-6">
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle>Resource Management</CardTitle>
-                    <CardDescription>Manage meeting rooms, phone booths, and equipment</CardDescription>
-                  </div>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Resource
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center space-x-2 mb-4">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                    <Input placeholder="Search resources..." className="pl-10" />
-                  </div>
-                  <Select defaultValue="all">
-                    <SelectTrigger className="w-40">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="meeting-room">Meeting Rooms</SelectItem>
-                      <SelectItem value="phone-booth">Phone Booths</SelectItem>
-                      <SelectItem value="equipment">Equipment</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Table>
-                  <TableHeader>
+        <TabsContent value="resources">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">All Resources</CardTitle>
+              <Button size="sm" onClick={handleAddResource}>
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Resource
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Capacity</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {resources.length === 0 ? (
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Capacity</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Today's Bookings</TableHead>
-                      <TableHead>Utilization</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableCell colSpan={6} className="text-center py-4">
+                        No resources found.
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {resources.map((resource) => (
+                  ) : (
+                    resources.map((resource) => (
                       <TableRow key={resource.id}>
                         <TableCell className="font-medium">{resource.name}</TableCell>
-                        <TableCell>{resource.type}</TableCell>
+                        <TableCell>{resource.type.replace(/_/g, " ")}</TableCell>
                         <TableCell>{resource.capacity}</TableCell>
+                        <TableCell>{resource.location}</TableCell>
                         <TableCell>
-                          <Badge variant={getStatusColor(resource.status)}>{resource.status}</Badge>
+                          <Badge
+                            variant={
+                              resource.status === "available"
+                                ? "default"
+                                : resource.status === "maintenance"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {resource.status}
+                          </Badge>
                         </TableCell>
-                        <TableCell>{resource.bookingsToday}</TableCell>
-                        <TableCell>{resource.utilization}</TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem>Edit Resource</DropdownMenuItem>
-                              <DropdownMenuItem>View Schedule</DropdownMenuItem>
-                              <DropdownMenuItem>Maintenance Mode</DropdownMenuItem>
-                              <DropdownMenuItem className="text-red-600">Remove</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="icon" onClick={() => handleEditResource(resource)}>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit resource</span>
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => deleteResource(resource.id)}>
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete resource</span>
+                          </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </main>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+          <ResourceFormDialog
+            open={isResourceDialogOpen}
+            onOpenChange={setIsResourceDialogOpen}
+            resource={editingResource}
+            onSave={handleSaveResource}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -1,17 +1,24 @@
 "use client"
 
-import type React from "react"
-
-import { SessionProvider } from "next-auth/react"
+import { ThemeProvider as NextThemesProvider } from "next-themes"
+import type { ThemeProviderProps } from "next-themes"
+import { SessionProvider } from "next-auth/react" // Correctly import SessionProvider
 import { AuthProvider } from "@/contexts/auth-context"
+import { AdminDataProvider } from "@/contexts/admin-data-context"
 import { BookingProvider } from "@/contexts/booking-context"
 
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children, ...props }: ThemeProviderProps) {
   return (
-    <SessionProvider>
-      <AuthProvider>
-        <BookingProvider>{children}</BookingProvider>
-      </AuthProvider>
-    </SessionProvider>
+    <NextThemesProvider {...props}>
+      <SessionProvider>
+        {" "}
+        {/* SessionProvider must wrap AuthProvider */}
+        <AuthProvider>
+          <AdminDataProvider>
+            <BookingProvider>{children}</BookingProvider>
+          </AdminDataProvider>
+        </AuthProvider>
+      </SessionProvider>
+    </NextThemesProvider>
   )
 }
