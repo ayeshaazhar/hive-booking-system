@@ -1,85 +1,27 @@
+
+
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Calendar as CalendarIcon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Users, Phone, Monitor, ArrowLeft, Clock, MapPin, CheckCircle, AlertCircle } from "lucide-react"
-import { Navigation } from "./navigation"
-import { useBookings } from "@/contexts/booking-context"
+import { useBooking, type Booking } from "@/contexts/booking-context" // Import Booking type
+import { useAdminData, type Resource as AdminResource } from "@/contexts/admin-data-context" // Import AdminResource type
 import { BookingDebug } from "./booking-debug"
-import { formatDateForStorage, isToday, timeToMinutes } from "@/lib/date-utils"
-
-const resources = {
-  "meeting-room": [
-    {
-      id: 1,
-      name: "Conference Room A",
-      capacity: 12,
-      amenities: ["Projector", "Whiteboard", "Video Conferencing"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-    {
-      id: 2,
-      name: "Huddle Room B",
-      capacity: 6,
-      amenities: ["TV Screen", "Whiteboard"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-    {
-      id: 3,
-      name: "Executive Boardroom",
-      capacity: 16,
-      amenities: ["Projector", "Video Conferencing", "Coffee Station"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-  ],
-  "phone-booth": [
-    {
-      id: 4,
-      name: "Phone Booth 1",
-      capacity: 1,
-      amenities: ["Soundproof", "Power Outlet"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-    {
-      id: 5,
-      name: "Phone Booth 2",
-      capacity: 1,
-      amenities: ["Soundproof", "Power Outlet", "USB Charging"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-  ],
-  resources: [
-    {
-      id: 6,
-      name: "Portable Projector",
-      capacity: 1,
-      amenities: ["HDMI", "Wireless Connection"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-    {
-      id: 7,
-      name: "Mobile Whiteboard",
-      capacity: 1,
-      amenities: ["Wheels", "Markers Included"],
-      available: true,
-      image: "/placeholder.svg?height=200&width=300",
-    },
-  ],
-}
+import { formatDateForStorage, timeToMinutes } from "@/lib/date-utils"
+import Image from "next/image"
+import { useAuth } from "@/contexts/auth-context"
+import { useSearchParams } from "next/navigation"
+import { Navigation } from "./navigation"
 
 const timeSlots = [
   "9:00 AM",
@@ -101,13 +43,11 @@ const timeSlots = [
   "5:00 PM",
   "5:30 PM",
 ]
-
 const durations = ["30 minutes", "1 hour", "1.5 hours", "2 hours", "3 hours", "4 hours"]
 
-// Helper function to calculate end time
-const calculateEndTime = (startTime: string, duration: string): string => {
+// Helper function to calculate end time for display
+const calculateDisplayEndTime = (startTime: string, duration: string): string => {
   const startMinutes = timeToMinutes(startTime)
-
   let durationMinutes = 0
   if (duration.includes("hour")) {
     const hours = Number.parseFloat(duration.replace(/[^\d.]/g, ""))
@@ -115,15 +55,23 @@ const calculateEndTime = (startTime: string, duration: string): string => {
   } else if (duration.includes("minute")) {
     durationMinutes = Number.parseInt(duration.replace(/[^\d]/g, ""))
   }
-
   const endMinutes = startMinutes + durationMinutes
   const endHours = Math.floor(endMinutes / 60)
   const endMins = endMinutes % 60
 
+  // Convert 24-hour to 12-hour format with AM/PM
   const period = endHours >= 12 ? "PM" : "AM"
-  const displayHours = endHours > 12 ? endHours - 12 : endHours === 0 ? 12 : endHours
+  const displayHours = endHours > 12 ? endHours - 12 : endHours === 0 ? 12 : endHours === 24 ? 12 : endHours // Handle midnight (00:00 -> 12 AM, 24:00 -> 12 AM next day)
 
   return `${displayHours}:${endMins.toString().padStart(2, "0")} ${period}`
+}
+
+// Helper to map URL type to resource.type
+const mapTypeToResourceType = (type: string) => {
+  if (type === "meeting-room") return "meeting_room"
+  if (type === "phone-booth") return "phone_booth"
+  if (type === "resources") return "equipment"
+  return type
 }
 
 export function BookingSystem() {
@@ -134,12 +82,148 @@ export function BookingSystem() {
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [selectedDuration, setSelectedDuration] = useState<string>("")
   const [purpose, setPurpose] = useState<string>("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
-  const [showDebug, setShowDebug] = useState(false)
+  // Remove unused state
+  // const [isLoading, setIsLoading] = useState(false)
+  // const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null)
+  // const [showDebug, setShowDebug] = useState(false)
+  const [conflictError, setConflictError] = useState("");
 
-  const { addBooking, checkAvailability, bookings } = useBookings()
+  // Hardcoded resources grouped by type
+  const resources = {
+    "meeting-room": [
+      {
+        id: 1,
+        name: "Conference Room A",
+        capacity: 12,
+        amenities: ["Projector", "Whiteboard", "Video Conferencing"],
+        available: true,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+      {
+        id: 2,
+        name: "Huddle Room B",
+        capacity: 6,
+        amenities: ["TV Screen", "Whiteboard"],
+        available: true,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+      {
+        id: 3,
+        name: "Executive Boardroom",
+        capacity: 16,
+        amenities: ["Projector", "Video Conferencing", "Coffee Station"],
+        available: false,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+    ],
+    "phone-booth": [
+      {
+        id: 4,
+        name: "Phone Booth 1",
+        capacity: 1,
+        amenities: ["Soundproof", "Power Outlet"],
+        available: true,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+      {
+        id: 5,
+        name: "Phone Booth 2",
+        capacity: 1,
+        amenities: ["Soundproof", "Power Outlet", "USB Charging"],
+        available: true,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+    ],
+    resources: [
+      {
+        id: 6,
+        name: "Portable Projector",
+        capacity: 1,
+        amenities: ["HDMI", "Wireless Connection"],
+        available: true,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+      {
+        id: 7,
+        name: "Mobile Whiteboard",
+        capacity: 1,
+        amenities: ["Wheels", "Markers Included"],
+        available: true,
+        image: "/placeholder.svg?height=200&width=300",
+      },
+    ],
+  };
   const router = useRouter()
+
+  const searchParams = useSearchParams();
+  const typeFromUrl = searchParams.get("type");
+
+  // Set type from URL on mount
+  useEffect(() => {
+    if (typeFromUrl && !selectedType) {
+      setSelectedType(typeFromUrl);
+    }
+  }, [typeFromUrl, selectedType]);
+
+  // Robust step logic
+  useEffect(() => {
+    if (!selectedType) setStep(1);
+    else if (selectedType && !selectedResource) setStep(2);
+    else if (selectedType && selectedResource) setStep(3);
+  }, [selectedType, selectedResource]);
+
+  const isDataLoaded = true // Assuming booking data loads with admin data or independently
+
+  // Function to check if a time slot is available
+  const checkTimeSlotAvailability = useCallback(
+    (
+      resourceId: string,
+      date: Date | undefined,
+      startTime: string,
+      duration: string,
+      allBookings: Booking[],
+    ): boolean => {
+      if (!date || !startTime || !duration) return false
+
+      const newBookingStartMinutes = timeToMinutes(startTime)
+      let durationMinutes = 0
+      if (duration.includes("hour")) {
+        durationMinutes = Number.parseFloat(duration.replace(/[^\d.]/g, "")) * 60
+      } else if (duration.includes("minute")) {
+        durationMinutes = Number.parseInt(duration.replace(/[^\d]/g, ""))
+      }
+      const newBookingEndMinutes = newBookingStartMinutes + durationMinutes
+
+      const selectedDateString = formatDateForStorage(date)
+
+      // Filter bookings for the same resource and date
+      const conflictingBookings = allBookings.filter((booking) => {
+        const bookingDateString = booking.startTime.split("T")[0] // Get date part from ISO string
+        return (
+          booking.resourceId === resourceId &&
+          bookingDateString === selectedDateString &&
+          (booking.status === "confirmed" || booking.status === "pending") // Only consider confirmed/pending bookings
+        )
+      })
+
+      // Check for overlaps
+      for (const existingBooking of conflictingBookings) {
+        const existingStartMinutes = timeToMinutes(existingBooking.startTime.split("T")[1]) // Extract time part and convert
+        const existingEndMinutes = timeToMinutes(existingBooking.endTime.split("T")[1]) // Extract time part and convert
+
+        // Overlap conditions:
+        // [newStart, newEnd] overlaps with [existingStart, existingEnd]
+        // This simplified check covers most overlaps:
+        const overlap = newBookingStartMinutes < existingEndMinutes && newBookingEndMinutes > existingStartMinutes
+
+        if (overlap) {
+          return false // Conflict found
+        }
+      }
+      return true // No conflicts
+    },
+    [], // Dependencies for useCallback
+  )
 
   const handleTypeSelect = (type: string) => {
     setSelectedType(type)
@@ -151,134 +235,150 @@ export function BookingSystem() {
     setStep(3)
   }
 
-  const handleBooking = async () => {
-    if (!selectedResource || !selectedDate || !selectedTime || !selectedDuration) {
-      setNotification({ type: "error", message: "Please fill in all required fields" })
-      return
+  const { addBooking, bookings } = useBooking();
+  const { user } = useAuth();
+
+  const hasConflict = useMemo(() => {
+    if (!selectedDate || !selectedTime || !selectedDuration || !selectedResource) return false;
+    // Convert selectedTime (e.g., "9:00 AM") to 24-hour format for easier Date object creation
+    const [timePart, ampmPart] = selectedTime.split(" ");
+    let [hours, minutes] = timePart.split(":").map(Number);
+    if (ampmPart === "PM" && hours !== 12) hours += 12;
+    if (ampmPart === "AM" && hours === 12) hours = 0;
+    const startDateTime = new Date(selectedDate);
+    startDateTime.setHours(hours, minutes, 0, 0);
+    // Calculate end time in minutes from start of day
+    const startMinutesOfDay = hours * 60 + minutes;
+    let durationMinutes = 0;
+    if (selectedDuration.includes("hour")) {
+      durationMinutes = Number.parseFloat(selectedDuration.replace(/[^\d.]/g, "")) * 60;
+    } else if (selectedDuration.includes("minute")) {
+      durationMinutes = Number.parseInt(selectedDuration.replace(/[^\d]/g, ""));
     }
-
-    setIsLoading(true)
-
-    try {
-      const endTime = calculateEndTime(selectedTime, selectedDuration)
-      // Use proper date formatting to avoid timezone issues
-      const dateString = formatDateForStorage(selectedDate)
-
-      console.log("Attempting to book:", {
-        resource: selectedResource.name,
-        resourceId: selectedResource.id,
-        date: dateString,
-        selectedDate: selectedDate,
-        startTime: selectedTime,
-        endTime: endTime,
-        duration: selectedDuration,
-      })
-
-      const result = await addBooking({
-        type:
-          selectedType === "meeting-room"
-            ? "Meeting Room"
-            : selectedType === "phone-booth"
-              ? "Phone Booth"
-              : "Equipment",
-        resource: selectedResource.name,
-        resourceId: selectedResource.id,
-        date: dateString,
-        startTime: selectedTime,
-        endTime: endTime,
-        duration: selectedDuration,
-        status: "confirmed",
-        purpose: purpose || undefined,
-        amenities: selectedResource.amenities,
-        upcoming: true,
-      })
-
-      if (result.success) {
-        setNotification({ type: "success", message: result.message })
-
-        // Reset form after successful booking
-        setTimeout(() => {
-          setStep(1)
-          setSelectedType("")
-          setSelectedResource(null)
-          setSelectedDate(undefined)
-          setSelectedTime("")
-          setSelectedDuration("")
-          setPurpose("")
-          setNotification(null)
-          router.push("/dashboard")
-        }, 2000)
-      } else {
-        setNotification({ type: "error", message: result.message })
-      }
-    } catch (error) {
-      console.error("Booking error:", error)
-      setNotification({ type: "error", message: "An error occurred while booking. Please try again." })
-    } finally {
-      setIsLoading(false)
+    const endMinutesOfDay = startMinutesOfDay + durationMinutes;
+    const endDateTime = new Date(selectedDate);
+    endDateTime.setHours(Math.floor(endMinutesOfDay / 60), endMinutesOfDay % 60, 0, 0);
+    if (endDateTime < startDateTime) {
+      endDateTime.setDate(endDateTime.getDate() + 1);
     }
+    const newStart = startDateTime.getTime();
+    const newEnd = endDateTime.getTime();
+    const selectedDateString = startDateTime.toISOString().split("T")[0];
+    return bookings.some(b =>
+      b.resourceId === selectedResource.id &&
+      b.status !== "cancelled" &&
+      b.startTime.split("T")[0] === selectedDateString &&
+      newStart < new Date(b.endTime).getTime() &&
+      newEnd > new Date(b.startTime).getTime()
+    );
+  }, [selectedDate, selectedTime, selectedDuration, selectedResource, bookings]);
+
+  useEffect(() => {
+    if (hasConflict) {
+      setConflictError("This resource is already booked for the selected time slot.");
+    } else {
+      setConflictError("");
+    }
+  }, [hasConflict]);
+
+  const handleBooking = () => {
+    if (!selectedDate || !selectedTime || !selectedDuration || !selectedResource || !user) {
+      alert("Please select a date, time, duration, and resource.");
+      return;
+    }
+    if (hasConflict) {
+      return;
+    }
+    // Convert selectedTime (e.g., "9:00 AM") to 24-hour format for easier Date object creation
+    const [timePart, ampmPart] = selectedTime.split(" ");
+    let [hours, minutes] = timePart.split(":").map(Number);
+    if (ampmPart === "PM" && hours !== 12) hours += 12;
+    if (ampmPart === "AM" && hours === 12) hours = 0;
+    const startDateTime = new Date(selectedDate);
+    startDateTime.setHours(hours, minutes, 0, 0);
+    // Calculate end time in minutes from start of day
+    const startMinutesOfDay = hours * 60 + minutes;
+    let durationMinutes = 0;
+    if (selectedDuration.includes("hour")) {
+      durationMinutes = Number.parseFloat(selectedDuration.replace(/[^\d.]/g, "")) * 60;
+    } else if (selectedDuration.includes("minute")) {
+      durationMinutes = Number.parseInt(selectedDuration.replace(/[^\d]/g, ""));
+    }
+    const endMinutesOfDay = startMinutesOfDay + durationMinutes;
+    const endDateTime = new Date(selectedDate);
+    endDateTime.setHours(Math.floor(endMinutesOfDay / 60), endMinutesOfDay % 60, 0, 0);
+    // Handle bookings that cross midnight
+    if (endDateTime < startDateTime) {
+      endDateTime.setDate(endDateTime.getDate() + 1);
+    }
+    addBooking({
+      type: selectedType === "meeting-room" ? "Meeting Room" : selectedType === "phone-booth" ? "Phone Booth" : "Equipment",
+      resource: selectedResource.name,
+      resourceId: selectedResource.id,
+      memberId: user.id,
+      startTime: startDateTime.toISOString(),
+      endTime: endDateTime.toISOString(),
+      purpose: purpose || undefined,
+      status: "confirmed",
+    });
+    alert("Booking confirmed!");
+    setStep(1);
+    setSelectedType("");
+    setSelectedResource(null);
+    setSelectedDate(undefined);
+    setSelectedTime("");
+    setSelectedDuration("");
+    setPurpose("");
   }
 
-  // Check availability when date, time, or duration changes
-  const endTime = selectedTime && selectedDuration ? calculateEndTime(selectedTime, selectedDuration) : ""
-  const dateString = selectedDate ? formatDateForStorage(selectedDate) : ""
-  const isTimeSlotAvailable =
-    selectedResource && selectedDate && selectedTime && endTime
-      ? checkAvailability(selectedResource.id, dateString, selectedTime, endTime)
-      : true
+  // Calculate display end time for the summary
+  const displayEndTime = selectedTime && selectedDuration ? calculateDisplayEndTime(selectedTime, selectedDuration) : ""
 
-  // Get existing bookings for the selected resource and date for debugging
-  const existingBookings =
-    selectedResource && selectedDate
-      ? bookings.filter(
-          (b) => b.resourceId === selectedResource.id && b.date === dateString && b.status !== "cancelled",
-        )
-      : []
+  // Determine if the selected time slot is available
+  const isTimeSlotAvailable = useMemo(() => {
+    if (!selectedResource || !selectedDate || !selectedTime || !selectedDuration) return false
+    return checkTimeSlotAvailability(selectedResource.id, selectedDate, selectedTime, selectedDuration, [])
+  }, [selectedResource, selectedDate, selectedTime, selectedDuration, checkTimeSlotAvailability])
 
-  // Filter time slots based on selected date and current time
+  // Filter time slots so that for today, only future slots (at least 30 minutes from now) are available
   const getFilteredTimeSlots = () => {
-    if (!selectedDate || !isToday(formatDateForStorage(selectedDate))) {
-      return timeSlots // All slots available if not today
-    }
-
-    const now = new Date()
-    const currentMinutes = now.getHours() * 60 + now.getMinutes()
-
+    if (!selectedDate) return timeSlots;
+    const today = new Date();
+    const isToday = selectedDate.toDateString() === today.toDateString();
+    if (!isToday) return timeSlots;
+    const currentMinutes = today.getHours() * 60 + today.getMinutes();
     return timeSlots.filter((slot) => {
-      const slotMinutes = timeToMinutes(slot)
-      // Allow slots that are at least 30 minutes from now to give buffer
-      return slotMinutes >= currentMinutes + 30
-    })
+      const [time, period] = slot.split(" ");
+      let [hours, minutes] = time.split(":").map(Number);
+      if (period === "PM" && hours !== 12) hours += 12;
+      if (period === "AM" && hours === 12) hours = 0;
+      const slotMinutes = hours * 60 + minutes;
+      return slotMinutes >= currentMinutes + 30;
+    });
+  };
+  const filteredTimeSlots = getFilteredTimeSlots();
+
+  // Type guard for Resource (from context)
+  function isRealResource(res: any): res is import("@/contexts/admin-data-context").Resource {
+    return typeof res.status === "string" && typeof res.location === "string"
+  }
+  // Type guard for fallback resource
+  function isFallbackResource(res: any): res is { id: number; name: string; capacity: number; amenities: string[]; available: boolean; image: string } {
+    return typeof res.available === "boolean" && Array.isArray(res.amenities)
   }
 
-  const filteredTimeSlots = getFilteredTimeSlots()
+  if (!isDataLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p>Loading data...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
-
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Debug Toggle */}
-        <div className="mb-4">
-          <Button variant="outline" size="sm" onClick={() => setShowDebug(!showDebug)}>
-            {showDebug ? "Hide" : "Show"} Debug Info
-          </Button>
-        </div>
-
-        {/* Notification */}
-        {notification && (
-          <div className="mb-6">
-            <Alert variant={notification.type === "error" ? "destructive" : "default"}>
-              {notification.type === "success" ? (
-                <CheckCircle className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
-              <AlertDescription>{notification.message}</AlertDescription>
-            </Alert>
-          </div>
-        )}
-
         <div className="mb-8">
           <div className="flex items-center space-x-4 mb-4">
             {step > 1 && (
@@ -292,7 +392,6 @@ export function BookingSystem() {
               <p className="text-gray-600 mt-2">Reserve meeting rooms, phone booths, and equipment</p>
             </div>
           </div>
-
           {/* Progress Steps */}
           <div className="flex items-center space-x-4">
             {[1, 2, 3].map((stepNum) => (
@@ -309,7 +408,6 @@ export function BookingSystem() {
             ))}
           </div>
         </div>
-
         {/* Step 1: Select Resource Type */}
         {step === 1 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -323,10 +421,9 @@ export function BookingSystem() {
                 <CardDescription>Conference rooms and huddle spaces for team meetings</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge variant="secondary">{resources["meeting-room"].length} rooms available</Badge>
+                <Badge>{resources["meeting-room"].length} rooms available</Badge>
               </CardContent>
             </Card>
-
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow"
               onClick={() => handleTypeSelect("phone-booth")}
@@ -337,10 +434,9 @@ export function BookingSystem() {
                 <CardDescription>Private soundproof spaces for calls and focused work</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge variant="secondary">{resources["phone-booth"].length} booths available</Badge>
+                <Badge>{resources["phone-booth"].length} booths available</Badge>
               </CardContent>
             </Card>
-
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow"
               onClick={() => handleTypeSelect("resources")}
@@ -351,58 +447,60 @@ export function BookingSystem() {
                 <CardDescription>Projectors, whiteboards, and other shared resources</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge variant="secondary">{resources.resources.length} items available</Badge>
+                <Badge>{resources["resources"].length} items available</Badge>
               </CardContent>
             </Card>
           </div>
         )}
-
         {/* Step 2: Select Specific Resource */}
         {step === 2 && selectedType && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {resources[selectedType as keyof typeof resources].map((resource) => (
-              <Card
-                key={resource.id}
-                className={`cursor-pointer transition-all ${
-                  resource.available ? "hover:shadow-lg" : "opacity-50 cursor-not-allowed"
-                }`}
-                onClick={() => resource.available && handleResourceSelect(resource)}
-              >
-                <div className="aspect-video bg-gray-100 rounded-t-lg">
-                  <img
-                    src={resource.image || "/placeholder.svg"}
-                    alt={resource.name}
-                    className="w-full h-full object-cover rounded-t-lg"
-                  />
-                </div>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">{resource.name}</CardTitle>
-                    <Badge variant={resource.available ? "default" : "destructive"}>
-                      {resource.available ? "Available" : "Booked"}
-                    </Badge>
+          (resources[selectedType as keyof typeof resources] && resources[selectedType as keyof typeof resources].length > 0) ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {(resources[selectedType as keyof typeof resources] as typeof resources["meeting-room"]).map((resource) => (
+                <Card
+                  key={resource.id}
+                  className={`cursor-pointer transition-all ${
+                    resource.available ? "hover:shadow-lg" : "opacity-50 cursor-not-allowed"
+                  }`}
+                  onClick={() => resource.available && handleResourceSelect(resource)}
+                >
+                  <div className="aspect-video bg-gray-100 rounded-t-lg">
+                    <img
+                      src={resource.image || "/placeholder.svg"}
+                      alt={resource.name}
+                      className="w-full h-full object-cover rounded-t-lg"
+                    />
                   </div>
-                  {resource.capacity > 1 && (
-                    <CardDescription className="flex items-center">
-                      <Users className="h-4 w-4 mr-1" />
-                      Up to {resource.capacity} people
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {resource.amenities.map((amenity) => (
-                      <Badge key={amenity} variant="outline" className="text-xs">
-                        {amenity}
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{resource.name}</CardTitle>
+                      <Badge variant={resource.available ? "default" : "destructive"}>
+                        {resource.available ? "Available" : "Booked"}
                       </Badge>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    </div>
+                    {resource.capacity > 1 && (
+                      <CardDescription className="flex items-center">
+                        <Users className="h-4 w-4 mr-1" />
+                        Up to {resource.capacity} people
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {resource.amenities.map((amenity) => (
+                        <Badge key={amenity} variant="outline" className="text-xs">
+                          {amenity}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div>No resources available for this type.</div>
+          )
         )}
-
         {/* Step 3: Select Date and Time */}
         {step === 3 && selectedResource && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -424,12 +522,9 @@ export function BookingSystem() {
                     />
                   </div>
                   {selectedDate && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      Selected: {selectedDate.toDateString()} (stored as: {dateString})
-                    </p>
+                    <p className="text-sm text-gray-600 mt-2">Selected: {selectedDate.toDateString()}</p>
                   )}
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="time">Start Time</Label>
@@ -438,15 +533,20 @@ export function BookingSystem() {
                         <SelectValue placeholder="Select time" />
                       </SelectTrigger>
                       <SelectContent>
-                        {filteredTimeSlots.map((time) => (
-                          <SelectItem key={time} value={time}>
-                            {time}
+                        {filteredTimeSlots.length > 0 ? (
+                          filteredTimeSlots.map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {time}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-slots" disabled>
+                            No available slots
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
-
                   <div>
                     <Label htmlFor="duration">Duration</Label>
                     <Select value={selectedDuration} onValueChange={setSelectedDuration}>
@@ -454,16 +554,21 @@ export function BookingSystem() {
                         <SelectValue placeholder="Select duration" />
                       </SelectTrigger>
                       <SelectContent>
-                        {durations.map((duration) => (
-                          <SelectItem key={duration} value={duration}>
-                            {duration}
+                        {durations.length > 0 ? (
+                          durations.map((duration) => (
+                            <SelectItem key={duration} value={duration}>
+                              {duration}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-duration" disabled>
+                            No durations available
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
-
                 {/* Availability Check */}
                 {selectedDate && selectedTime && selectedDuration && (
                   <div className="space-y-3">
@@ -472,35 +577,18 @@ export function BookingSystem() {
                         <div className="flex items-center text-green-700">
                           <CheckCircle className="h-4 w-4 mr-2" />
                           <span className="text-sm">
-                            Available: {selectedTime} - {endTime}
+                            Available: {selectedTime} - {displayEndTime}
                           </span>
                         </div>
                       ) : (
                         <div className="flex items-center text-red-700">
                           <AlertCircle className="h-4 w-4 mr-2" />
-                          <span className="text-sm">This time slot is already booked</span>
+                          <span className="text-sm">This time slot is already booked or invalid.</span>
                         </div>
                       )}
                     </div>
-
-                    {/* Show existing bookings for this resource/date */}
-                    {existingBookings.length > 0 && (
-                      <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-200">
-                        <h4 className="text-sm font-medium text-yellow-800 mb-2">
-                          Existing bookings for {selectedResource.name} on {selectedDate.toDateString()}:
-                        </h4>
-                        <ul className="text-xs text-yellow-700 space-y-1">
-                          {existingBookings.map((booking) => (
-                            <li key={booking.id}>
-                              {booking.startTime} - {booking.endTime} ({booking.status})
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
                   </div>
                 )}
-
                 <div>
                   <Label htmlFor="purpose">Purpose (Optional)</Label>
                   <Textarea
@@ -513,7 +601,6 @@ export function BookingSystem() {
                 </div>
               </CardContent>
             </Card>
-
             <Card>
               <CardHeader>
                 <CardTitle>Booking Summary</CardTitle>
@@ -528,53 +615,59 @@ export function BookingSystem() {
                     </p>
                   </div>
                 </div>
-
                 {selectedDate && (
                   <div className="flex items-center space-x-3">
-                    <Calendar className="h-5 w-5 text-gray-400" />
+                    <CalendarIcon className="h-5 w-5 text-gray-400" />
                     <div>
                       <p className="font-medium">{selectedDate.toDateString()}</p>
                     </div>
                   </div>
                 )}
-
                 {selectedTime && selectedDuration && (
                   <div className="flex items-center space-x-3">
                     <Clock className="h-5 w-5 text-gray-400" />
                     <div>
                       <p className="font-medium">
-                        {selectedTime} - {endTime}
+                        {selectedTime} - {displayEndTime}
                       </p>
                       <p className="text-sm text-gray-500">Duration: {selectedDuration}</p>
                     </div>
                   </div>
                 )}
-
                 <div className="pt-4 border-t">
-                  <h4 className="font-medium mb-2">Amenities Included:</h4>
+                  <h4 className="font-medium mb-2">Details:</h4>
                   <div className="flex flex-wrap gap-2">
-                    {selectedResource.amenities.map((amenity:string) => (
+                    {isRealResource(selectedResource) && selectedResource.description && (
+                      <Badge variant="outline" className="text-xs">
+                        {selectedResource.description}
+                      </Badge>
+                    )}
+                    {isFallbackResource(selectedResource) && selectedResource.amenities && selectedResource.amenities.map((amenity: string) => (
                       <Badge key={amenity} variant="outline" className="text-xs">
                         {amenity}
                       </Badge>
                     ))}
+                    <Badge variant="outline" className="text-xs">
+                      Location: {isRealResource(selectedResource) ? selectedResource.location : "N/A"}
+                    </Badge>
                   </div>
                 </div>
-
+                {conflictError && (
+                  <div className="text-red-600 text-sm mt-2">{conflictError}</div>
+                )}
                 <Button
                   className="w-full mt-6"
                   onClick={handleBooking}
-                  disabled={!selectedDate || !selectedTime || !selectedDuration || !isTimeSlotAvailable || isLoading}
+                  disabled={!selectedDate || !selectedTime || !selectedDuration || hasConflict}
                 >
-                  {isLoading ? "Confirming..." : "Confirm Booking"}
+                  Confirm Booking
                 </Button>
               </CardContent>
             </Card>
           </div>
         )}
-
         {/* Debug Information */}
-        {showDebug && <BookingDebug />}
+        {/* <BookingDebug /> */}
       </main>
     </div>
   )

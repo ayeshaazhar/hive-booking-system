@@ -50,7 +50,7 @@ export function Navigation() {
           <div className="flex items-center">
             <Link href="/dashboard" className="flex items-center space-x-2">
               <Building2 className="h-8 w-8 text-orange-500" />
-              <span className="text-xl font-bold">Hive</span>
+              <span className="text-xl font-bold text-orange-600">The Hive</span>
             </Link>
           </div>
 

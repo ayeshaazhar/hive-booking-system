@@ -11,11 +11,14 @@ export interface Booking {
   endTime: string // ISO string
   status: "pending" | "confirmed" | "cancelled" | "completed"
   notes?: string
+  type: string // e.g., 'Meeting Room', 'Phone Booth', 'Equipment'
+  resource: string // resource name
+  purpose?: string
 }
 
 interface BookingContextType {
   bookings: Booking[]
-  addBooking: (booking: Omit<Booking, "id" | "status">) => void
+  addBooking: (booking: Omit<Booking, "id">) => void
   updateBooking: (id: string, updates: Partial<Booking>) => void
   deleteBooking: (id: string) => void
   getBookingDetails: (booking: Booking) => {
@@ -23,6 +26,7 @@ interface BookingContextType {
     member: Member | undefined
   }
   isLoaded: boolean
+  getUpcomingBookings: (memberId: string) => Booking[]
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined)
@@ -36,6 +40,9 @@ const initialBookings: Booking[] = [
     endTime: "2024-07-20T10:00:00Z",
     status: "confirmed",
     notes: "Team meeting",
+    type: "Meeting Room",
+    resource: "Conference Room A",
+    purpose: "Team meeting",
   },
   {
     id: "book-2",
@@ -45,6 +52,9 @@ const initialBookings: Booking[] = [
     endTime: "2024-07-20T11:30:00Z",
     status: "pending",
     notes: "Client call",
+    type: "Phone Booth",
+    resource: "Phone Booth 1",
+    purpose: "Client call",
   },
   {
     id: "book-3",
@@ -54,6 +64,9 @@ const initialBookings: Booking[] = [
     endTime: "2024-07-21T16:00:00Z",
     status: "completed",
     notes: "Project review",
+    type: "Meeting Room",
+    resource: "Conference Room A",
+    purpose: "Project review",
   },
 ]
 
@@ -80,11 +93,11 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     }
   }, [bookings, isLoaded])
 
-  const addBooking = useCallback((newBookingData: Omit<Booking, "id" | "status">) => {
+  const addBooking = useCallback((newBookingData: Omit<Booking, "id">) => {
     setBookings((prev) => {
       const newBooking: Booking = {
         id: `book-${Date.now()}`,
-        status: "pending", // Default status for new bookings
+        status: newBookingData.status || "pending",
         ...newBookingData,
       }
       return [...prev, newBooking]
@@ -108,6 +121,16 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     [members, resources],
   )
 
+  const getUpcomingBookings = useCallback((memberId: string) => {
+    const now = new Date()
+    return bookings.filter(
+      (booking) =>
+        booking.memberId === memberId &&
+        new Date(booking.startTime) >= now &&
+        booking.status !== "cancelled"
+    )
+  }, [bookings])
+
   const value = React.useMemo(
     () => ({
       bookings,
@@ -116,8 +139,9 @@ export function BookingProvider({ children }: { children: ReactNode }) {
       deleteBooking,
       getBookingDetails,
       isLoaded,
+      getUpcomingBookings,
     }),
-    [bookings, addBooking, updateBooking, deleteBooking, getBookingDetails, isLoaded],
+    [bookings, addBooking, updateBooking, deleteBooking, getBookingDetails, isLoaded, getUpcomingBookings],
   )
 
   return <BookingContext.Provider value={value}>{children}</BookingContext.Provider>
