@@ -88,71 +88,7 @@ export function BookingSystem() {
   // const [showDebug, setShowDebug] = useState(false)
   const [conflictError, setConflictError] = useState("");
 
-  // Hardcoded resources grouped by type
-  const resources = {
-    "meeting-room": [
-      {
-        id: 1,
-        name: "Conference Room A",
-        capacity: 12,
-        amenities: ["Projector", "Whiteboard", "Video Conferencing"],
-        available: true,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-      {
-        id: 2,
-        name: "Huddle Room B",
-        capacity: 6,
-        amenities: ["TV Screen", "Whiteboard"],
-        available: true,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-      {
-        id: 3,
-        name: "Executive Boardroom",
-        capacity: 16,
-        amenities: ["Projector", "Video Conferencing", "Coffee Station"],
-        available: false,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-    ],
-    "phone-booth": [
-      {
-        id: 4,
-        name: "Phone Booth 1",
-        capacity: 1,
-        amenities: ["Soundproof", "Power Outlet"],
-        available: true,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-      {
-        id: 5,
-        name: "Phone Booth 2",
-        capacity: 1,
-        amenities: ["Soundproof", "Power Outlet", "USB Charging"],
-        available: true,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-    ],
-    resources: [
-      {
-        id: 6,
-        name: "Portable Projector",
-        capacity: 1,
-        amenities: ["HDMI", "Wireless Connection"],
-        available: true,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-      {
-        id: 7,
-        name: "Mobile Whiteboard",
-        capacity: 1,
-        amenities: ["Wheels", "Markers Included"],
-        available: true,
-        image: "/placeholder.svg?height=200&width=300",
-      },
-    ],
-  };
+  const { resources, isLoaded: resourcesLoaded } = useAdminData();
   const router = useRouter()
 
   const searchParams = useSearchParams();
@@ -358,6 +294,16 @@ export function BookingSystem() {
   };
   const filteredTimeSlots = getFilteredTimeSlots();
 
+  // Group resources by type for selection
+  const groupedResources = useMemo(() => {
+    const groups: Record<string, AdminResource[]> = {};
+    for (const res of resources) {
+      if (!groups[res.type]) groups[res.type] = [];
+      groups[res.type].push(res);
+    }
+    return groups;
+  }, [resources]);
+
   // Type guard for Resource (from context)
   function isRealResource(res: any): res is import("@/contexts/admin-data-context").Resource {
     return typeof res.status === "string" && typeof res.location === "string"
@@ -421,7 +367,7 @@ export function BookingSystem() {
                 <CardDescription>Conference rooms and huddle spaces for team meetings</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge>{resources["meeting-room"].length} rooms available</Badge>
+                <Badge>{resourcesLoaded ? groupedResources["meeting_room"]?.length || 0 : "Loading..."} rooms available</Badge>
               </CardContent>
             </Card>
             <Card
@@ -434,12 +380,12 @@ export function BookingSystem() {
                 <CardDescription>Private soundproof spaces for calls and focused work</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge>{resources["phone-booth"].length} booths available</Badge>
+                <Badge>{resourcesLoaded ? groupedResources["phone_booth"]?.length || 0 : "Loading..."} booths available</Badge>
               </CardContent>
             </Card>
             <Card
               className="cursor-pointer hover:shadow-lg transition-shadow"
-              onClick={() => handleTypeSelect("resources")}
+              onClick={() => handleTypeSelect("equipment")}
             >
               <CardHeader>
                 <Monitor className="h-12 w-12 text-purple-600 mb-4" />
@@ -447,22 +393,20 @@ export function BookingSystem() {
                 <CardDescription>Projectors, whiteboards, and other shared resources</CardDescription>
               </CardHeader>
               <CardContent>
-                <Badge>{resources["resources"].length} items available</Badge>
+                <Badge>{resourcesLoaded ? groupedResources["equipment"]?.length || 0 : "Loading..."} items available</Badge>
               </CardContent>
             </Card>
           </div>
         )}
         {/* Step 2: Select Specific Resource */}
         {step === 2 && selectedType && (
-          (resources[selectedType as keyof typeof resources] && resources[selectedType as keyof typeof resources].length > 0) ? (
+          (groupedResources[mapTypeToResourceType(selectedType)] && groupedResources[mapTypeToResourceType(selectedType)].length > 0) ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(resources[selectedType as keyof typeof resources] as typeof resources["meeting-room"]).map((resource) => (
+              {(groupedResources[mapTypeToResourceType(selectedType)] as AdminResource[]).map((resource) => (
                 <Card
                   key={resource.id}
-                  className={`cursor-pointer transition-all ${
-                    resource.available ? "hover:shadow-lg" : "opacity-50 cursor-not-allowed"
-                  }`}
-                  onClick={() => resource.available && handleResourceSelect(resource)}
+                  className={`cursor-pointer transition-all ${resource.status === 'available' ? 'hover:shadow-lg' : 'opacity-50 cursor-not-allowed'}`}
+                  onClick={() => resource.status === 'available' && handleResourceSelect(resource)}
                 >
                   <div className="aspect-video bg-gray-100 rounded-t-lg">
                     <img
@@ -474,8 +418,12 @@ export function BookingSystem() {
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg">{resource.name}</CardTitle>
-                      <Badge variant={resource.available ? "default" : "destructive"}>
-                        {resource.available ? "Available" : "Booked"}
+                      <Badge variant={resource.status === 'available' ? 'default' : 'destructive'}>
+                        {resource.status === 'available'
+                          ? 'Available'
+                          : resource.status
+                            ? resource.status.charAt(0).toUpperCase() + resource.status.slice(1)
+                            : 'Unknown'}
                       </Badge>
                     </div>
                     {resource.capacity > 1 && (
@@ -487,11 +435,15 @@ export function BookingSystem() {
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
-                      {resource.amenities.map((amenity) => (
-                        <Badge key={amenity} variant="outline" className="text-xs">
-                          {amenity}
-                        </Badge>
-                      ))}
+                      {Array.isArray(resource.amenities) && resource.amenities.length > 0 ? (
+                        resource.amenities.map((amenity: string) => (
+                          <Badge key={amenity} variant="outline" className="text-xs">
+                            {amenity}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-xs text-gray-400">No amenities listed</span>
+                      )}
                     </div>
                   </CardContent>
                 </Card>

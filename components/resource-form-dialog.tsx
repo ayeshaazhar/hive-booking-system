@@ -97,7 +97,6 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
               <SelectContent>
                 <SelectItem value="meeting_room">Meeting Room</SelectItem>
                 <SelectItem value="phone_booth">Phone Booth</SelectItem>
-                <SelectItem value="desk">Desk</SelectItem>
                 <SelectItem value="equipment">Equipment</SelectItem>
               </SelectContent>
             </Select>

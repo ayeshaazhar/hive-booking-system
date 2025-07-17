@@ -23,9 +23,14 @@ import {
   Building2,
   type LucideIcon,
 } from "lucide-react"
-import { useAdminData } from "@/contexts/admin-data-context"
+import { Resource, useAdminData, Member } from "@/contexts/admin-data-context"
 import { useBooking } from "@/contexts/booking-context"
 import { useSearchParams } from "next/navigation";
+import { ResourceFormDialog } from "@/components/resource-form-dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MemberFormDialog } from "@/components/member-form-dialog";
+import { useAuth } from "@/contexts/auth-context"
+import { useRouter } from "next/navigation"
 
 // Map string icon names to Lucide React components
 const iconMap: { [key: string]: LucideIcon } = {
@@ -37,9 +42,20 @@ const iconMap: { [key: string]: LucideIcon } = {
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview")
+  const [openDialog, setOpenDialog] = useState(false)
+  const [editResource, setEditResource] = useState<Resource | null>(null);
+  const [showDeleteId, setShowDeleteId] = useState<string | null>(null);
+  const [resourceSearch, setResourceSearch] = useState("");
+  const [resourceTypeFilter, setResourceTypeFilter] = useState("all");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [memberRoleFilter, setMemberRoleFilter] = useState("all");
+  const [memberStatusFilter, setMemberStatusFilter] = useState("all");
+  const [editMember, setEditMember] = useState<any | null>(null); // Changed to any as Member type is removed
+  const [showDeleteMemberId, setShowDeleteMemberId] = useState<string | null>(null);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   // Use data from contexts
-  const { members, resources, isLoaded: adminDataLoaded } = useAdminData()
+  const { members, resources, isLoaded: adminDataLoaded, updateResource, deleteResource, addResource, updateMember, addMember, deleteMember } = useAdminData();
   const { bookings, isLoaded: bookingDataLoaded } = useBooking()
 
   const isLoaded = adminDataLoaded && bookingDataLoaded // Combined loading state
@@ -85,12 +101,73 @@ export function AdminDashboard() {
     }
   }
 
-  if (!isLoaded) {
+  const { user, loading } = useAuth();
+  const router = useRouter();
+
+  // Auth protection
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p>Loading dashboard data...</p>
+        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 flex flex-col items-center">
+          <h1 className="text-2xl font-bold mb-2">Loading Admin Dashboard...</h1>
+          <p className="text-gray-500 mb-6 text-center">Please wait while we check your access</p>
+        </div>
       </div>
-    )
+    );
+  }
+
+  // List of admin emails
+  const adminEmails = ["admin@example.com", "ayesha.azhar.shaikh@gmail.com"];
+  if (user && !(adminEmails.includes(user.email) || ("role" in user && user.role === "admin"))) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-8 flex flex-col items-center">
+          <h1 className="text-2xl font-bold mb-2 text-red-600">Access Denied</h1>
+          <p className="text-gray-500 mb-6 text-center">You do not have permission to view the admin dashboard.</p>
+        </div>
+      </div>
+    );
+  }
+
+  const resourceTypeOptions = [
+    { value: "all", label: "All Types" },
+    { value: "meeting_room", label: "Meeting Rooms" },
+    { value: "phone_booth", label: "Phone Booths" },
+    { value: "equipment", label: "Equipment" },
+    { value: "desk", label: "Desks" },
+  ];
+
+  const memberRoleOptions = [
+    { value: "all", label: "All Roles" },
+    { value: "member", label: "Member" },
+    { value: "admin", label: "Admin" },
+  ];
+  const memberStatusOptions = [
+    { value: "all", label: "All Statuses" },
+    { value: "active", label: "Active" },
+    { value: "inactive", label: "Inactive" },
+    { value: "pending", label: "Pending" },
+  ];
+
+  // In the Members table, use member.role || 'member' and member.status || 'active' for fallback
+  // For badge variant, map status to a valid variant
+  const getMemberStatusVariant = (status: string) => {
+    switch (status) {
+      case "active":
+        return "default";
+      case "pending":
+        return "secondary";
+      case "inactive":
+        return "destructive";
+      default:
+        return "secondary";
+    }
   }
 
   return (
@@ -319,77 +396,129 @@ export function AdminDashboard() {
                       <CardTitle>Member Management</CardTitle>
                       <CardDescription>Manage Hive members and their access</CardDescription>
                     </div>
-                    <Button>
-                      <UserPlus className="h-4 w-4 mr-2" />
-                      Invite Member
-                    </Button>
+                    <Button onClick={() => setInviteDialogOpen(true)}><UserPlus className="mr-2 h-4 w-4" />Invite Member</Button>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center space-x-2 mb-4">
+                  <div className="flex items-center space-x-2 mt-4">
                     <div className="relative flex-1 max-w-sm">
                       <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input placeholder="Search members..." className="pl-10" />
+                      <Input
+                        placeholder="Search members..."
+                        value={memberSearch}
+                        onChange={e => setMemberSearch(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
-                    <Select defaultValue="all">
-                      <SelectTrigger className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
+                    <Select value={memberRoleFilter} onValueChange={setMemberRoleFilter}>
+                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Members</SelectItem>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
+                        {memberRoleOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={memberStatusFilter} onValueChange={setMemberStatusFilter}>
+                      <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {memberStatusOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  {members.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Company</TableHead>
-                          <TableHead>Join Date</TableHead>
-                          <TableHead>Bookings</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {members.map((member) => (
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Company</TableHead>
+                        <TableHead>Department</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {members
+                        .filter(member => {
+                          const q = memberSearch.toLowerCase();
+                          const matchesRole = memberRoleFilter === "all" || member.role === memberRoleFilter;
+                          const matchesStatus = memberStatusFilter === "all" || member.status === memberStatusFilter;
+                          return (
+                            matchesRole && matchesStatus && (
+                              member.name.toLowerCase().includes(q) ||
+                              member.email.toLowerCase().includes(q) ||
+                              (member.company && member.company.toLowerCase().includes(q)) ||
+                              (member.department && member.department.toLowerCase().includes(q))
+                            )
+                          );
+                        })
+                        .map((member) => (
                           <TableRow key={member.id}>
-                            <TableCell className="font-medium">{member.name}</TableCell>
+                            <TableCell>{member.name}</TableCell>
                             <TableCell>{member.email}</TableCell>
                             <TableCell>{member.company}</TableCell>
-                            <TableCell>{new Date(member.joinDate).toLocaleDateString()}</TableCell>
-                            <TableCell>{member.totalBookings}</TableCell>
-                            <TableCell>
-                              <Badge variant={getStatusColor(member.status)}>{member.status}</Badge>
-                            </TableCell>
+                            <TableCell>{member.department}</TableCell>
+                            <TableCell>{member.role || 'Member'}</TableCell>
+                            <TableCell><Badge variant={getMemberStatusVariant(member.status || 'active')}>{member.status || 'active'}</Badge></TableCell>
                             <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="h-4 w-4" />
+                                  <Button size="icon" variant="ghost">
+                                    <MoreHorizontal className="h-5 w-5" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>View Profile</DropdownMenuItem>
-                                  <DropdownMenuItem>Reset Password</DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    {member.status === "active" ? "Deactivate" : "Activate"}
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600">Remove</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setEditMember(member)}>Edit</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-red-600" onClick={() => setShowDeleteMemberId(member.id)}>Delete</DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p>No members data available</p>
+                    </TableBody>
+                  </Table>
+                  {/* Edit/Add Member Dialog */}
+                  <MemberFormDialog
+                    open={!!editMember}
+                    onOpenChange={(open) => { if (!open) setEditMember(null); }}
+                    member={editMember || undefined}
+                    onSave={(data) => {
+                      if (editMember && editMember.id) {
+                        // update member
+                        updateMember(editMember.id, data);
+                      } else {
+                        // add member
+                        addMember(data as Omit<Member, "id" | "status" | "totalBookings" | "role">);
+                      }
+                      setEditMember(null);
+                    }}
+                  />
+                  {/* Invite Member Dialog */}
+                  <MemberFormDialog
+                    open={inviteDialogOpen}
+                    onOpenChange={setInviteDialogOpen}
+                    onSave={(data) => {
+                      // Add as pending (status will be set by provider)
+                      addMember(data as Omit<Member, "id" | "status" | "totalBookings" | "role">);
+                      setInviteDialogOpen(false);
+                    }}
+                  />
+                  {/* Delete Confirmation Dialog */}
+                  {showDeleteMemberId && (
+                    <Dialog open={!!showDeleteMemberId} onOpenChange={(open) => !open && setShowDeleteMemberId(null)}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Delete Member</DialogTitle>
+                          <DialogDescription>Are you sure you want to delete this member? This action cannot be undone.</DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setShowDeleteMemberId(null)}>Cancel</Button>
+                          <Button variant="destructive" onClick={() => { deleteMember(showDeleteMemberId!); setShowDeleteMemberId(null); }}>Delete</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   )}
                 </CardContent>
               </Card>
@@ -404,76 +533,110 @@ export function AdminDashboard() {
                       <CardTitle>Resource Management</CardTitle>
                       <CardDescription>Manage meeting rooms, phone booths, and equipment</CardDescription>
                     </div>
-                    <Button>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Add Resource
-                    </Button>
+                    <Button onClick={() => setEditResource({} as Resource)}><Plus className="mr-2 h-4 w-4" />Add Resource</Button>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center space-x-2 mb-4">
+                  <div className="flex items-center space-x-2 mt-4">
                     <div className="relative flex-1 max-w-sm">
                       <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                      <Input placeholder="Search resources..." className="pl-10" />
+                      <Input
+                        placeholder="Search resources..."
+                        value={resourceSearch}
+                        onChange={e => setResourceSearch(e.target.value)}
+                        className="pl-10"
+                      />
                     </div>
-                    <Select defaultValue="all">
+                    <Select value={resourceTypeFilter} onValueChange={setResourceTypeFilter}>
                       <SelectTrigger className="w-40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="meeting_room">Meeting Rooms</SelectItem>
-                        <SelectItem value="phone_booth">Phone Booths</SelectItem>
-                        <SelectItem value="equipment">Equipment</SelectItem>
-                        <SelectItem value="desk">Desks</SelectItem>
+                        {resourceTypeOptions.map(opt => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  {resources.length > 0 ? (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Capacity</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Today's Bookings</TableHead>
-                          <TableHead>Utilization</TableHead>
-                          <TableHead>Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {resources.map((resource) => (
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Capacity</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {resources
+                        .filter(resource => {
+                          const q = resourceSearch.toLowerCase();
+                          const matchesType = resourceTypeFilter === "all" || resource.type === resourceTypeFilter;
+                          return (
+                            matchesType && (
+                              resource.name.toLowerCase().includes(q) ||
+                              resource.type.toLowerCase().includes(q) ||
+                              (resource.location && resource.location.toLowerCase().includes(q)) ||
+                              (resource.description && resource.description.toLowerCase().includes(q))
+                            )
+                          );
+                        })
+                        .map((resource) => (
                           <TableRow key={resource.id}>
-                            <TableCell className="font-medium">{resource.name}</TableCell>
-                            <TableCell>{resource.type}</TableCell>
+                            <TableCell>{resource.name}</TableCell>
+                            <TableCell>{resource.type.replace(/_/g, " ")}</TableCell>
                             <TableCell>{resource.capacity}</TableCell>
-                            <TableCell>
-                              <Badge variant={getStatusColor(resource.status)}>{resource.status}</Badge>
-                            </TableCell>
-                            <TableCell>{"N/A"}</TableCell> {/* Bookings today not directly in resource context */}
-                            <TableCell>{"N/A"}</TableCell> {/* Utilization not directly in resource context */}
+                            <TableCell><Badge variant={resource.status === "available" ? "default" : resource.status === "maintenance" ? "destructive" : "outline"}>{resource.status}</Badge></TableCell>
+                            <TableCell>{resource.location}</TableCell>
                             <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="h-4 w-4" />
+                                  <Button size="icon" variant="ghost">
+                                    <MoreHorizontal className="h-5 w-5" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>Edit Resource</DropdownMenuItem>
-                                  <DropdownMenuItem>View Schedule</DropdownMenuItem>
-                                  <DropdownMenuItem>Maintenance Mode</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-red-600">Remove</DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => setEditResource(resource)}>Edit</DropdownMenuItem>
+                                  <DropdownMenuItem className="text-red-600" onClick={() => setShowDeleteId(resource.id)}>Delete</DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <p>No resources data available</p>
+                    </TableBody>
+                  </Table>
+                  {/* Edit Resource Dialog */}
+                  <ResourceFormDialog
+                    open={!!editResource}
+                    onOpenChange={(open) => {
+                      if (!open) setEditResource(null);
+                    }}
+                    resource={editResource || undefined}
+                    onSave={(data) => {
+                      if (editResource && editResource.id) {
+                        updateResource(editResource.id, data);
+                      } else {
+                        addResource(data as Omit<Resource, "id" | "status">);
+                      }
+                      setEditResource(null);
+                    }}
+                  />
+                  {/* Delete Confirmation Dialog */}
+                  {showDeleteId && (
+                    <Dialog open={!!showDeleteId} onOpenChange={(open) => !open && setShowDeleteId(null)}>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Delete Resource</DialogTitle>
+                          <DialogDescription>Are you sure you want to delete this resource? This action cannot be undone.</DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setShowDeleteId(null)}>Cancel</Button>
+                          <Button variant="destructive" onClick={() => { deleteResource(showDeleteId!); setShowDeleteId(null); }}>Delete</Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   )}
                 </CardContent>
               </Card>

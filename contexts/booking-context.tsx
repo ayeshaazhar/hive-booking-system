@@ -76,16 +76,16 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {
-    if (!adminDataLoaded) return
+    if (!adminDataLoaded) return;
 
-    const storedBookings = localStorage.getItem("hive-bookings")
+    const storedBookings = localStorage.getItem("hive-bookings");
     if (storedBookings) {
-      setBookings(JSON.parse(storedBookings))
+      setBookings(JSON.parse(storedBookings));
     } else {
-      setBookings(initialBookings)
+      setBookings(initialBookings);
     }
-    setIsLoaded(true)
-  }, [adminDataLoaded])
+    setIsLoaded(true);
+  }, [adminDataLoaded, resources]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -97,8 +97,8 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     setBookings((prev) => {
       const newBooking: Booking = {
         id: `book-${Date.now()}`,
-        status: newBookingData.status || "pending",
         ...newBookingData,
+        status: newBookingData.status || "pending",
       }
       return [...prev, newBooking]
     })
