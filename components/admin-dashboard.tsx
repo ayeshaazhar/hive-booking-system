@@ -230,7 +230,7 @@ export function AdminDashboard() {
                       </TableHeader>
                       <TableBody>
                         {bookings.map((booking) => {
-                          const member = members.find((m) => m.id === booking.memberId)
+                          const member = members.find((m) => m.id === booking.userId)
                           const resource = resources.find((r) => r.id === booking.resourceId)
                           return (
                             <TableRow key={booking.id}>
@@ -336,7 +336,7 @@ export function AdminDashboard() {
                       </TableHeader>
                       <TableBody>
                         {bookings.map((booking) => {
-                          const member = members.find((m) => m.id === booking.memberId)
+                          const member = members.find((m) => m.id === booking.userId)
                           const resource = resources.find((r) => r.id === booking.resourceId)
                           return (
                             <TableRow key={booking.id}>
@@ -443,12 +443,12 @@ export function AdminDashboard() {
                       {members
                         .filter(member => {
                           const q = memberSearch.toLowerCase();
-                          const matchesRole = memberRoleFilter === "all" || member.role === memberRoleFilter;
-                          const matchesStatus = memberStatusFilter === "all" || member.status === memberStatusFilter;
+                          const matchesRole = memberRoleFilter === "all" || ((member as any).role || 'member') === memberRoleFilter;
+                          const matchesStatus = memberStatusFilter === "all" || ((member as any).status || 'active') === memberStatusFilter;
                           return (
                             matchesRole && matchesStatus && (
-                              member.name.toLowerCase().includes(q) ||
-                              member.email.toLowerCase().includes(q) ||
+                              (member.name && member.name.toLowerCase().includes(q)) ||
+                              (member.email && member.email.toLowerCase().includes(q)) ||
                               (member.company && member.company.toLowerCase().includes(q)) ||
                               (member.department && member.department.toLowerCase().includes(q))
                             )
@@ -460,8 +460,8 @@ export function AdminDashboard() {
                             <TableCell>{member.email}</TableCell>
                             <TableCell>{member.company}</TableCell>
                             <TableCell>{member.department}</TableCell>
-                            <TableCell>{member.role || 'Member'}</TableCell>
-                            <TableCell><Badge variant={getMemberStatusVariant(member.status || 'active')}>{member.status || 'active'}</Badge></TableCell>
+                            <TableCell>{(member as any).role || 'Member'}</TableCell>
+                            <TableCell><Badge variant={getMemberStatusVariant((member as any).status || 'active')}>{(member as any).status || 'active'}</Badge></TableCell>
                             <TableCell>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
@@ -576,8 +576,8 @@ export function AdminDashboard() {
                           const matchesType = resourceTypeFilter === "all" || resource.type === resourceTypeFilter;
                           return (
                             matchesType && (
-                              resource.name.toLowerCase().includes(q) ||
-                              resource.type.toLowerCase().includes(q) ||
+                              (resource.name && resource.name.toLowerCase().includes(q)) ||
+                              (resource.type && resource.type.toLowerCase().includes(q)) ||
                               (resource.location && resource.location.toLowerCase().includes(q)) ||
                               (resource.description && resource.description.toLowerCase().includes(q))
                             )
@@ -618,7 +618,7 @@ export function AdminDashboard() {
                       if (editResource && editResource.id) {
                         updateResource(editResource.id, data);
                       } else {
-                        addResource(data as Omit<Resource, "id" | "status">);
+                        addResource(data as Omit<Resource, "id">);
                       }
                       setEditResource(null);
                     }}

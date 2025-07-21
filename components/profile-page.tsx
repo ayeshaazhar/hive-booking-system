@@ -14,7 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { User, Mail, Building2, Bell, Shield, Camera, Calendar, CheckCircle } from "lucide-react"
 import { Navigation } from "./navigation"
 
-export function ProfilePage() {
+export default function ProfilePage() {
   const { user, updateProfile } = useAuth()
   const [notifications, setNotifications] = useState({
     email: true,
@@ -50,8 +50,6 @@ export function ProfilePage() {
     })
     setIsEditing(false)
     setShowSuccess(true)
-
-    // Hide success message after 3 seconds
     setTimeout(() => setShowSuccess(false), 3000)
   }
 
@@ -76,14 +74,11 @@ export function ProfilePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
-
       <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
           <p className="text-gray-600 mt-2">Manage your account information and preferences</p>
         </div>
-
-        {/* Success Message */}
         {showSuccess && (
           <div className="mb-6">
             <Alert>
@@ -92,7 +87,6 @@ export function ProfilePage() {
             </Alert>
           </div>
         )}
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Profile Picture and Basic Info */}
           <div className="lg:col-span-1">
@@ -119,7 +113,6 @@ export function ProfilePage() {
                 <p className="text-xs text-gray-500 mt-2">Profile picture synced from Google</p>
               </CardContent>
             </Card>
-
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle>Account Status</CardTitle>
@@ -148,7 +141,6 @@ export function ProfilePage() {
               </CardContent>
             </Card>
           </div>
-
           {/* Main Settings */}
           <div className="lg:col-span-2 space-y-6">
             {/* Personal Information */}
@@ -219,7 +211,6 @@ export function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
-
             {/* Notification Preferences */}
             <Card>
               <CardHeader>
@@ -264,7 +255,6 @@ export function ProfilePage() {
                 </div>
               </CardContent>
             </Card>
-
             {/* Account Information */}
             <Card>
               <CardHeader>

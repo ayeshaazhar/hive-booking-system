@@ -11,6 +11,7 @@ declare module "next-auth" {
       joinDate: string
       totalBookings: number
       status: string
+      image?: string | null  // ✅ Add this
     } & DefaultSession["user"]
   }
 
@@ -21,6 +22,7 @@ declare module "next-auth" {
     joinDate?: string
     totalBookings?: number
     status?: string
+    image?: string | null // ✅ Add this
   }
 }
 
@@ -33,5 +35,24 @@ declare module "next-auth/jwt" {
     joinDate: string
     totalBookings: number
     status: string
+    image?: string | null // ✅ Add this (if you use it in callbacks)
+  }
+}
+import NextAuth from "next-auth"
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string
+      name?: string | null
+      email?: string | null
+      image?: string | null
+      company: string
+      department: string
+      phone: string
+      joinDate: string
+      totalBookings: number
+      status: string
+    }
   }
 }

@@ -73,7 +73,10 @@ export function BookingDebug() {
           <div>
             <h4 className="font-medium">User ID: {user.id}</h4>
             <h4 className="font-medium">Total Bookings in System: {bookings.length}</h4>
-            <h4 className="font-medium">Your Bookings: {bookings.filter((b) => b.memberId === user.id).length}</h4>
+            <h4 className="font-medium">Your Bookings: {bookings.filter((b) => b.userId === user.id).length}</h4>
+            {bookings.some((b) => !b.userId) && (
+              <div className="text-red-600 text-xs">Warning: Some bookings are missing userId!</div>
+            )}
           </div>
           <div>
             <h4 className="font-medium mb-2">All Bookings:</h4>

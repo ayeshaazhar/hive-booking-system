@@ -50,25 +50,61 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
     }
   }, [resource, open])
 
-  const handleSubmit = () => {
-    const resourceData = {
-      name,
-      type,
-      capacity,
-      location,
-      description,
-      status,
+  const handleSubmit = async () => {
+  const resourceData = {
+    name,
+    type,
+    capacity,
+    location,
+    description,
+    status,
+  }
+
+  try {
+    if (resource) {
+      // EDITING existing resource — send PATCH request
+      const response = await fetch(`/api/resources/${resource.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(resourceData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        console.error("Update failed:", error)
+        return
+      }
+
+      const updatedResource = await response.json()
+      onSave(updatedResource) // pass back updated object
+    } else {
+      // ADDING new resource — send POST request
+      const response = await fetch(`/api/resources`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(resourceData),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        console.error("Create failed:", error)
+        return
+      }
+
+      const newResource = await response.json()
+      onSave(newResource)
     }
 
-    if (resource) {
-      // Editing existing resource
-      onSave({ ...resource, ...resourceData })
-    } else {
-      // Adding new resource
-      onSave(resourceData)
-    }
-    onOpenChange(false)
+    onOpenChange(false) // close the dialog
+  } catch (err) {
+    console.error("Network error:", err)
   }
+}
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

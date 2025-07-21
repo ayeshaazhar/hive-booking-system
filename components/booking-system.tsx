@@ -42,6 +42,10 @@ const timeSlots = [
   "4:30 PM",
   "5:00 PM",
   "5:30 PM",
+  "6:00 PM",
+  "6:30 PM",
+  "7:00 PM",
+  "7:30 PM",
 ]
 const durations = ["30 minutes", "1 hour", "1.5 hours", "2 hours", "3 hours", "4 hours"]
 
@@ -248,13 +252,10 @@ export function BookingSystem() {
       endDateTime.setDate(endDateTime.getDate() + 1);
     }
     addBooking({
-      type: selectedType === "meeting-room" ? "Meeting Room" : selectedType === "phone-booth" ? "Phone Booth" : "Equipment",
-      resource: selectedResource.name,
+      userId: user.id,
       resourceId: selectedResource.id,
-      memberId: user.id,
       startTime: startDateTime.toISOString(),
       endTime: endDateTime.toISOString(),
-      purpose: purpose || undefined,
       status: "confirmed",
     });
     alert("Booking confirmed!");

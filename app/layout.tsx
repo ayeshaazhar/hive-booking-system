@@ -9,7 +9,11 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Hive Member Portal",
   description: "Manage your coworking space bookings and members.",
+  icons: {
+    icon: "/p2.ico",
+  },
 }
+
 
 export default function RootLayout({
   children,

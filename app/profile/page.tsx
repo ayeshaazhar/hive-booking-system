@@ -1,4 +1,4 @@
-import { ProfilePage } from "@/components/profile-page"
+import ProfilePage from "@/components/profile-page"
 
 export default function Profile() {
   return <ProfilePage />

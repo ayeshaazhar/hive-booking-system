@@ -11,6 +11,7 @@ import { Calendar, Phone, Users, Clock, Plus, Monitor } from "lucide-react"
 import Link from "next/link"
 import { Navigation } from "./navigation"
 import { formatDateForDisplay, isToday } from "@/lib/date-utils"
+import { BookingDebug } from "./booking-debug"
 
 // Map resource type to icon and label
 const resourceCategories: {
@@ -98,7 +99,7 @@ export default function DashboardPage() {
   const upcomingBookings = bookings
     .filter(
       (booking) =>
-        booking.memberId === user.id &&
+        booking.userId === user.id &&
         new Date(booking.startTime) >= new Date() &&
         booking.status !== "cancelled"
     )
@@ -214,6 +215,72 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </main>
+      <BookingDebug />
     </div>
   )
 }
+// "use client"
+
+// import React from "react"
+// import { useAdminData } from "@/contexts/admin-data-context"
+// import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+// import { useSession } from "next-auth/react"
+
+// export default function DashboardPage() {
+//   const { data: session } = useSession()
+//   const user = session?.user
+//   const { bookings, resources, members } = useAdminData()
+
+//   if (!user) return <p>You must be logged in to view the dashboard.</p>
+
+//   const upcomingBookings = Array.isArray(bookings)
+//     ? bookings.filter(
+//         (booking) =>
+//           booking.memberId === user.id && new Date(booking.startTime) >= new Date()
+//       )
+//     : []
+
+//   return (
+//     <div className="p-6 grid gap-6">
+//       <Card>
+//         <CardHeader>
+//           <CardTitle>Welcome, {user.name} 👋</CardTitle>
+//         </CardHeader>
+//         <CardContent>
+//           <p>Email: {user.email}</p>
+//           <p>Department: {user.department || "N/A"}</p>
+//           <p>Status: {user.status}</p>
+//           <p>Total Bookings: {user.totalBookings}</p>
+//         </CardContent>
+//       </Card>
+
+//       <Card>
+//         <CardHeader>
+//           <CardTitle>Upcoming Bookings</CardTitle>
+//         </CardHeader>
+//         <CardContent className="grid gap-4">
+//           {upcomingBookings.length === 0 ? (
+//             <p>No upcoming bookings.</p>
+//           ) : (
+//             upcomingBookings.map((booking) => (
+//               <div key={booking.id} className="border p-3 rounded">
+//                 <p>
+//                   <strong>Resource:</strong>{" "}
+//                   {resources.find((r) => r.id === booking.resourceId)?.name ?? "Unknown"}
+//                 </p>
+//                 <p>
+//                   <strong>Start:</strong>{" "}
+//                   {new Date(booking.startTime).toLocaleString()}
+//                 </p>
+//                 <p>
+//                   <strong>End:</strong>{" "}
+//                   {new Date(booking.endTime).toLocaleString()}
+//                 </p>
+//               </div>
+//             ))
+//           )}
+//         </CardContent>
+//       </Card>
+//     </div>
+//   )
+// }

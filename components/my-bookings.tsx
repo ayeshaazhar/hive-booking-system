@@ -152,7 +152,7 @@ export function MyBookings() {
     return bookings
       .filter(
         (booking: Booking) =>
-          booking.memberId === user?.id && new Date(booking.startTime) >= now && booking.status !== "cancelled",
+          booking.userId === user?.id && new Date(booking.startTime) >= now && booking.status !== "cancelled",
       )
       .sort((a: Booking, b: Booking) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
   }, [bookings, user])
@@ -162,7 +162,7 @@ export function MyBookings() {
     return bookings
       .filter(
         (booking: Booking) =>
-          booking.memberId === user?.id &&
+          booking.userId === user?.id &&
           new Date(booking.startTime) < now &&
           booking.status !== "cancelled",
       )
