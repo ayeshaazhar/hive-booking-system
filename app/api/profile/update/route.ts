@@ -3,6 +3,9 @@ import { authOptions } from "@/lib/auth-config"
 import { prisma } from "@/lib/prisma"
 import { NextResponse, NextRequest } from "next/server"
 
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session || !session.user?.email) {

@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma"
 import { NextResponse, NextRequest } from "next/server"
 import type { Session } from "next-auth"
 
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
 async function resolveDbUserId(session: Session | null): Promise<string | null> {
   const email = session?.user?.email
   if (!email) return null

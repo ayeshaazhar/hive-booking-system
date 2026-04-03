@@ -2,6 +2,9 @@
 import { NextResponse, NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 
+export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+
 export async function GET() {
   try {
     const resources = await prisma.resource.findMany()
