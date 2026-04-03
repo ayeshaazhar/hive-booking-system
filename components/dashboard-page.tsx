@@ -215,7 +215,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </main>
-      <BookingDebug />
+      {/* <BookingDebug /> */}
     </div>
   )
 }

@@ -258,6 +258,16 @@ export function BookingSystem() {
       endTime: endDateTime.toISOString(),
       status: "confirmed",
     });
+//     addBooking({
+//   userId: user.id,
+//   resourceId: selectedResource.id,
+//   resource: selectedResource,
+//   startTime: startDateTime.toISOString(),
+//   endTime: endDateTime.toISOString(),
+//   status: "confirmed",
+//   type: selectedResource.type, // must be a string like 'meeting_room'
+// });
+
     alert("Booking confirmed!");
     setStep(1);
     setSelectedType("");

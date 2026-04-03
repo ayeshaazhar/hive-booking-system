@@ -123,7 +123,7 @@ export function AdminDashboard() {
   }
 
   // List of admin emails
-  const adminEmails = ["admin@example.com", "ayesha.azhar.shaikh@gmail.com"];
+  const adminEmails = ["admin@example.com", "ayesha.azhar.shaikh@gmail.com", "ayesha.chargeup@gmail.com"];
   if (user && !(adminEmails.includes(user.email) || ("role" in user && user.role === "admin"))) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">

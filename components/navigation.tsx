@@ -47,12 +47,23 @@ export function Navigation() {
     <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          <div className="flex items-center">
+          {/* <div className="flex items-center">
             <Link href="/dashboard" className="flex items-center space-x-2">
               <Building2 className="h-8 w-8 text-orange-500" />
               <span className="text-xl font-bold text-orange-600">The Hive</span>
             </Link>
-          </div>
+          </div> */}
+          
+
+<div className="flex items-center">
+  <Link href="/" className="flex items-center space-x-2">
+    <img src="/favicon.ico" alt="The Hive Logo" className="h-9 w-auto" />
+
+
+    {/* <Building2 className="h-8 w-8 text-orange-500" /> */}
+  </Link>
+</div>
+
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
