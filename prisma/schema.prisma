@@ -36,5 +36,7 @@ model Booking {
   resourceId String
   startTime  DateTime
   endTime    DateTime
-  status     String   @default("pending") // ✅ Add this line
+  status     String   @default("pending")
+  purpose    String?
+  notes      String?
 }

@@ -9,6 +9,7 @@ import { Users, Phone, Monitor, Calendar, Clock, MoreHorizontal } from "lucide-r
 import { useBooking } from "@/contexts/booking-context"
 import { useAuth } from "@/contexts/auth-context"
 import { formatDateForDisplay } from "@/lib/date-utils"
+import { intervalsOverlap, isBlockingBookingStatus } from "@/lib/booking-overlap"
 import type { Booking } from "@/contexts/booking-context"
 import { Navigation } from "./navigation"
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu"
@@ -27,7 +28,7 @@ function BookingEditDialog({ open, onOpenChange, booking, onSave }: {
   open: boolean,
   onOpenChange: (open: boolean) => void,
   booking: Booking,
-  onSave: (updates: Partial<Booking>) => void
+  onSave: (updates: Partial<Booking>) => Promise<void>
 }) {
   const [date, setDate] = useState<string>(booking.startTime.split("T")[0])
   const [time, setTime] = useState<string>(() => {
@@ -55,29 +56,28 @@ function BookingEditDialog({ open, onOpenChange, booking, onSave }: {
   const { bookings } = useBooking()
 
   function hasConflict(newStart: Date, newEnd: Date) {
-    return bookings.some(b =>
-      b.id !== booking.id &&
-      b.resourceId === booking.resourceId &&
-      b.status !== "cancelled" &&
-      newStart < new Date(b.endTime) &&
-      newEnd > new Date(b.startTime)
+    return bookings.some(
+      (b) =>
+        b.id !== booking.id &&
+        b.resourceId === booking.resourceId &&
+        isBlockingBookingStatus(b.status) &&
+        intervalsOverlap(newStart, newEnd, new Date(b.startTime), new Date(b.endTime)),
     )
   }
 
-  function handleSave() {
+  async function handleSave() {
     setSaving(true)
     setError("")
-    // Calculate new start and end time
     const [hstr, mstr] = time.split(":")
-    let [h, m] = [parseInt(hstr), parseInt(mstr)]
-    let ampm = time.includes("PM") ? "PM" : "AM"
+    let [h, m] = [parseInt(hstr, 10), parseInt(mstr, 10)]
+    const ampm = time.includes("PM") ? "PM" : "AM"
     if (ampm === "PM" && h !== 12) h += 12
     if (ampm === "AM" && h === 12) h = 0
     const start = new Date(date)
     start.setHours(h, m, 0, 0)
     let durationMinutes = 0
     if (duration.includes("hour")) durationMinutes = Number.parseFloat(duration.replace(/[^\d.]/g, "")) * 60
-    else if (duration.includes("minute")) durationMinutes = Number.parseInt(duration.replace(/[^\d]/g, ""))
+    else if (duration.includes("minute")) durationMinutes = Number.parseInt(duration.replace(/[^\d]/g, ""), 10)
     const end = new Date(start.getTime() + durationMinutes * 60000)
     if (hasConflict(start, end)) {
       setError("This time slot overlaps with another booking for this resource.")
@@ -86,14 +86,19 @@ function BookingEditDialog({ open, onOpenChange, booking, onSave }: {
     }
     let notes = booking.notes ? booking.notes : ""
     if (!notes.includes("edited")) notes = notes ? notes + ", edited" : "edited"
-    onSave({
-      startTime: start.toISOString(),
-      endTime: end.toISOString(),
-      purpose,
-      notes
-    })
-    setSaving(false)
-    onOpenChange(false)
+    try {
+      await onSave({
+        startTime: start.toISOString(),
+        endTime: end.toISOString(),
+        purpose,
+        notes,
+      })
+      onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save changes.")
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -145,29 +150,26 @@ export function MyBookings() {
   const { bookings, isLoaded, updateBooking } = useBooking()
   const [activeTab, setActiveTab] = useState<string>("upcoming")
   const [editDialogOpen, setEditDialogOpen] = useState<string | null>(null)
-  const [editError, setEditError] = useState<string>("")
 
   const upcomingBookings = useMemo<Booking[]>(() => {
     const now = new Date()
     return bookings
       .filter(
         (booking: Booking) =>
-          booking.userId === user?.id && new Date(booking.startTime) >= now && booking.status !== "cancelled",
+          booking.status !== "cancelled" && new Date(booking.endTime) > now,
       )
       .sort((a: Booking, b: Booking) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-  }, [bookings, user])
+  }, [bookings])
 
   const pastBookings = useMemo<Booking[]>(() => {
     const now = new Date()
     return bookings
       .filter(
         (booking: Booking) =>
-          booking.userId === user?.id &&
-          new Date(booking.startTime) < now &&
-          booking.status !== "cancelled",
+          booking.status !== "cancelled" && new Date(booking.endTime) <= now,
       )
       .sort((a: Booking, b: Booking) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime())
-  }, [bookings, user])
+  }, [bookings])
 
   if (!user) {
     return (
@@ -270,7 +272,11 @@ export function MyBookings() {
                     Edit Booking
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => updateBooking(booking.id, { status: "cancelled", notes: "cancelled" })}
+                    onClick={() => {
+                      void updateBooking(booking.id, { status: "cancelled", notes: "cancelled" }).catch((e) =>
+                        alert(e instanceof Error ? e.message : "Could not cancel booking."),
+                      )
+                    }}
                     className="text-red-600 focus:text-red-700"
                   >
                     Cancel Booking
@@ -281,7 +287,7 @@ export function MyBookings() {
                 open={editDialogOpen === booking.id}
                 onOpenChange={open => setEditDialogOpen(open ? booking.id : null)}
                 booking={booking}
-                onSave={updates => updateBooking(booking.id, updates)}
+                onSave={(updates) => updateBooking(booking.id, updates)}
               />
             </>
           )}

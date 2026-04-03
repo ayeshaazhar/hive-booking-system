@@ -24,9 +24,61 @@ export interface Booking {
   purpose?: string
 }
 
+/** Fields the API accepts when creating a booking (no nested objects). */
+export type CreateBookingInput = {
+  resourceId: string
+  startTime: string
+  endTime: string
+  status?: Booking["status"]
+  purpose?: string
+  notes?: string
+}
+
+function typeKeyToLabel(typeKey: string | undefined): string {
+  if (!typeKey) return ""
+  switch (typeKey) {
+    case "meeting_room":
+      return "Meeting Room"
+    case "phone_booth":
+      return "Phone Booth"
+    case "equipment":
+      return "Equipment"
+    default:
+      return typeKey
+  }
+}
+
+function normalizeApiBooking(raw: Record<string, unknown>, resources: Resource[]): Booking {
+  const resourceId = String(raw.resourceId ?? "")
+  const meta = resources.find((r) => r.id === resourceId)
+  const rel = raw.resource as { name?: string; type?: string } | string | undefined
+  const relObj = rel && typeof rel === "object" ? rel : undefined
+  const typeKey = meta?.type ?? relObj?.type
+  const resourceName = meta?.name ?? relObj?.name ?? ""
+
+  const start = raw.startTime
+  const end = raw.endTime
+  const startTime =
+    typeof start === "string" ? start : start instanceof Date ? start.toISOString() : ""
+  const endTime = typeof end === "string" ? end : end instanceof Date ? end.toISOString() : ""
+
+  return {
+    id: String(raw.id ?? ""),
+    userId: String(raw.userId ?? ""),
+    resourceId,
+    startTime,
+    endTime,
+    status: raw.status as Booking["status"],
+    notes: raw.notes != null ? String(raw.notes) : undefined,
+    purpose: raw.purpose != null ? String(raw.purpose) : undefined,
+    type: typeKeyToLabel(typeKey),
+    resource: resourceName,
+  }
+}
+
 interface BookingContextType {
   bookings: Booking[]
-  addBooking: (booking: Omit<Booking, "id">) => Promise<void>
+  addBooking: (booking: CreateBookingInput) => Promise<void>
   updateBooking: (id: string, updates: Partial<Booking>) => Promise<void>
   deleteBooking: (id: string) => Promise<void>
   getBookingDetails: (booking: Booking) => {
@@ -46,74 +98,89 @@ export function BookingProvider({ children }: { children: ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false)
 
   useEffect(() => {
-    const fetchBookings = async () => {
-      if (!session?.user?.email) return
+    let cancelled = false
+
+    const load = async () => {
+      if (!adminDataLoaded || status === "loading") return
+
+      if (status !== "authenticated" || !session?.user?.email) {
+        if (!cancelled) {
+          setBookings([])
+          setIsLoaded(true)
+        }
+        return
+      }
 
       try {
         const res = await fetch("/api/my-bookings")
-        let data = await res.json()
-        // Enrich bookings with resource info for UI compatibility
-        data = data.map((booking: any) => {
-          const resource = resources.find((r) => r.id === booking.resourceId)
-          return {
-            ...booking,
-            type: resource?.type
-              ? resource.type === "meeting_room" ? "Meeting Room"
-                : resource.type === "phone_booth" ? "Phone Booth"
-                : resource.type === "equipment" ? "Equipment"
-                : resource.type
-              : "",
-            resource: resource?.name || "",
+        if (!res.ok) {
+          if (!cancelled) {
+            setBookings([])
+            setIsLoaded(true)
           }
-        })
-        setBookings(data)
+          return
+        }
+        const data = await res.json()
+        if (cancelled) return
+        const rows = Array.isArray(data) ? data : []
+        setBookings(rows.map((b: Record<string, unknown>) => normalizeApiBooking(b, resources)))
       } catch (err) {
         console.error("Failed to load bookings:", err)
+        if (!cancelled) setBookings([])
       } finally {
-        setIsLoaded(true)
+        if (!cancelled) setIsLoaded(true)
       }
     }
 
-    if (status === "authenticated" && adminDataLoaded) {
-      fetchBookings()
+    load()
+    return () => {
+      cancelled = true
     }
   }, [session, status, adminDataLoaded, resources])
 
-  const addBooking = useCallback(async (newBookingData: Omit<Booking, "id">) => {
-    try {
+  const addBooking = useCallback(
+    async (payload: CreateBookingInput) => {
       const res = await fetch("/api/my-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newBookingData),
+        body: JSON.stringify(payload),
       })
-      const newBooking = await res.json()
-      setBookings((prev) => [...prev, newBooking])
-    } catch (err) {
-      console.error("Failed to add booking", err)
-    }
-  }, [])
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message = typeof body.error === "string" ? body.error : "Failed to create booking"
+        throw new Error(message)
+      }
+      setBookings((prev) => [...prev, normalizeApiBooking(body as Record<string, unknown>, resources)])
+    },
+    [resources],
+  )
 
-  const updateBooking = useCallback(async (id: string, updates: Partial<Booking>) => {
-    try {
+  const updateBooking = useCallback(
+    async (id: string, updates: Partial<Booking>) => {
       const res = await fetch(`/api/my-bookings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       })
-      const updated = await res.json()
-      setBookings((prev) => prev.map((b) => (b.id === id ? updated : b)))
-    } catch (err) {
-      console.error("Failed to update booking", err)
-    }
-  }, [])
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const message = typeof body.error === "string" ? body.error : "Failed to update booking"
+        throw new Error(message)
+      }
+      const normalized = normalizeApiBooking(body as Record<string, unknown>, resources)
+      setBookings((prev) => prev.map((b) => (b.id === id ? normalized : b)))
+    },
+    [resources],
+  )
 
   const deleteBooking = useCallback(async (id: string) => {
-    try {
-      await fetch(`/api/my-bookings/${id}`, { method: "DELETE" })
-      setBookings((prev) => prev.filter((b) => b.id !== id))
-    } catch (err) {
-      console.error("Failed to delete booking", err)
+    const res = await fetch(`/api/my-bookings/${id}`, { method: "DELETE" })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      const message = typeof body.error === "string" ? body.error : "Failed to delete booking"
+      throw new Error(message)
     }
+    setBookings((prev) => prev.filter((b) => b.id !== id))
   }, [])
 
   const getBookingDetails = useCallback(
@@ -125,15 +192,18 @@ export function BookingProvider({ children }: { children: ReactNode }) {
     [members, resources],
   )
 
-  const getUpcomingBookings = useCallback((userId: string) => {
-    const now = new Date()
-    return bookings.filter(
-      (booking) =>
-        booking.userId === userId &&
-        new Date(booking.startTime) >= now &&
-        booking.status !== "cancelled"
-    )
-  }, [bookings])
+  const getUpcomingBookings = useCallback(
+    (userId: string) => {
+      const now = new Date()
+      return bookings.filter(
+        (booking) =>
+          booking.userId === userId &&
+          new Date(booking.endTime) > now &&
+          booking.status !== "cancelled",
+      )
+    },
+    [bookings],
+  )
 
   const value = React.useMemo(
     () => ({

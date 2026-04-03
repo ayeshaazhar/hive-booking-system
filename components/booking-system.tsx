@@ -14,10 +14,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Users, Phone, Monitor, ArrowLeft, Clock, MapPin, CheckCircle, AlertCircle } from "lucide-react"
-import { useBooking, type Booking } from "@/contexts/booking-context" // Import Booking type
+import { useBooking } from "@/contexts/booking-context"
 import { useAdminData, type Resource as AdminResource } from "@/contexts/admin-data-context" // Import AdminResource type
-import { BookingDebug } from "./booking-debug"
 import { formatDateForStorage, timeToMinutes } from "@/lib/date-utils"
+import { intervalsOverlap, isBlockingBookingStatus } from "@/lib/booking-overlap"
 import Image from "next/image"
 import { useAuth } from "@/contexts/auth-context"
 import { useSearchParams } from "next/navigation"
@@ -114,57 +114,6 @@ export function BookingSystem() {
 
   const isDataLoaded = true // Assuming booking data loads with admin data or independently
 
-  // Function to check if a time slot is available
-  const checkTimeSlotAvailability = useCallback(
-    (
-      resourceId: string,
-      date: Date | undefined,
-      startTime: string,
-      duration: string,
-      allBookings: Booking[],
-    ): boolean => {
-      if (!date || !startTime || !duration) return false
-
-      const newBookingStartMinutes = timeToMinutes(startTime)
-      let durationMinutes = 0
-      if (duration.includes("hour")) {
-        durationMinutes = Number.parseFloat(duration.replace(/[^\d.]/g, "")) * 60
-      } else if (duration.includes("minute")) {
-        durationMinutes = Number.parseInt(duration.replace(/[^\d]/g, ""))
-      }
-      const newBookingEndMinutes = newBookingStartMinutes + durationMinutes
-
-      const selectedDateString = formatDateForStorage(date)
-
-      // Filter bookings for the same resource and date
-      const conflictingBookings = allBookings.filter((booking) => {
-        const bookingDateString = booking.startTime.split("T")[0] // Get date part from ISO string
-        return (
-          booking.resourceId === resourceId &&
-          bookingDateString === selectedDateString &&
-          (booking.status === "confirmed" || booking.status === "pending") // Only consider confirmed/pending bookings
-        )
-      })
-
-      // Check for overlaps
-      for (const existingBooking of conflictingBookings) {
-        const existingStartMinutes = timeToMinutes(existingBooking.startTime.split("T")[1]) // Extract time part and convert
-        const existingEndMinutes = timeToMinutes(existingBooking.endTime.split("T")[1]) // Extract time part and convert
-
-        // Overlap conditions:
-        // [newStart, newEnd] overlaps with [existingStart, existingEnd]
-        // This simplified check covers most overlaps:
-        const overlap = newBookingStartMinutes < existingEndMinutes && newBookingEndMinutes > existingStartMinutes
-
-        if (overlap) {
-          return false // Conflict found
-        }
-      }
-      return true // No conflicts
-    },
-    [], // Dependencies for useCallback
-  )
-
   const handleTypeSelect = (type: string) => {
     setSelectedType(type)
     setStep(2)
@@ -178,40 +127,39 @@ export function BookingSystem() {
   const { addBooking, bookings } = useBooking();
   const { user } = useAuth();
 
-  const hasConflict = useMemo(() => {
-    if (!selectedDate || !selectedTime || !selectedDuration || !selectedResource) return false;
-    // Convert selectedTime (e.g., "9:00 AM") to 24-hour format for easier Date object creation
-    const [timePart, ampmPart] = selectedTime.split(" ");
-    let [hours, minutes] = timePart.split(":").map(Number);
-    if (ampmPart === "PM" && hours !== 12) hours += 12;
-    if (ampmPart === "AM" && hours === 12) hours = 0;
-    const startDateTime = new Date(selectedDate);
-    startDateTime.setHours(hours, minutes, 0, 0);
-    // Calculate end time in minutes from start of day
-    const startMinutesOfDay = hours * 60 + minutes;
-    let durationMinutes = 0;
+  const { proposedStart, proposedEnd } = useMemo(() => {
+    if (!selectedDate || !selectedTime || !selectedDuration) {
+      return { proposedStart: null as Date | null, proposedEnd: null as Date | null }
+    }
+    const [timePart, ampmPart] = selectedTime.split(" ")
+    let [hours, minutes] = timePart.split(":").map(Number)
+    if (ampmPart === "PM" && hours !== 12) hours += 12
+    if (ampmPart === "AM" && hours === 12) hours = 0
+    const startDateTime = new Date(selectedDate)
+    startDateTime.setHours(hours, minutes, 0, 0)
+    const startMinutesOfDay = hours * 60 + minutes
+    let durationMinutes = 0
     if (selectedDuration.includes("hour")) {
-      durationMinutes = Number.parseFloat(selectedDuration.replace(/[^\d.]/g, "")) * 60;
+      durationMinutes = Number.parseFloat(selectedDuration.replace(/[^\d.]/g, "")) * 60
     } else if (selectedDuration.includes("minute")) {
-      durationMinutes = Number.parseInt(selectedDuration.replace(/[^\d]/g, ""));
+      durationMinutes = Number.parseInt(selectedDuration.replace(/[^\d]/g, ""))
     }
-    const endMinutesOfDay = startMinutesOfDay + durationMinutes;
-    const endDateTime = new Date(selectedDate);
-    endDateTime.setHours(Math.floor(endMinutesOfDay / 60), endMinutesOfDay % 60, 0, 0);
+    const endMinutesOfDay = startMinutesOfDay + durationMinutes
+    const endDateTime = new Date(selectedDate)
+    endDateTime.setHours(Math.floor(endMinutesOfDay / 60), endMinutesOfDay % 60, 0, 0)
     if (endDateTime < startDateTime) {
-      endDateTime.setDate(endDateTime.getDate() + 1);
+      endDateTime.setDate(endDateTime.getDate() + 1)
     }
-    const newStart = startDateTime.getTime();
-    const newEnd = endDateTime.getTime();
-    const selectedDateString = startDateTime.toISOString().split("T")[0];
-    return bookings.some(b =>
-      b.resourceId === selectedResource.id &&
-      b.status !== "cancelled" &&
-      b.startTime.split("T")[0] === selectedDateString &&
-      newStart < new Date(b.endTime).getTime() &&
-      newEnd > new Date(b.startTime).getTime()
-    );
-  }, [selectedDate, selectedTime, selectedDuration, selectedResource, bookings]);
+    return { proposedStart: startDateTime, proposedEnd: endDateTime }
+  }, [selectedDate, selectedTime, selectedDuration])
+
+  const hasConflict = useMemo(() => {
+    if (!proposedStart || !proposedEnd || !selectedResource) return false
+    return bookings.some((b) => {
+      if (b.resourceId !== selectedResource.id || !isBlockingBookingStatus(b.status)) return false
+      return intervalsOverlap(proposedStart, proposedEnd, new Date(b.startTime), new Date(b.endTime))
+    })
+  }, [bookings, proposedStart, proposedEnd, selectedResource])
 
   useEffect(() => {
     if (hasConflict) {
@@ -221,71 +169,42 @@ export function BookingSystem() {
     }
   }, [hasConflict]);
 
-  const handleBooking = () => {
+  const handleBooking = async () => {
     if (!selectedDate || !selectedTime || !selectedDuration || !selectedResource || !user) {
-      alert("Please select a date, time, duration, and resource.");
-      return;
+      alert("Please select a date, time, duration, and resource.")
+      return
     }
-    if (hasConflict) {
-      return;
+    if (hasConflict || !proposedStart || !proposedEnd) {
+      return
     }
-    // Convert selectedTime (e.g., "9:00 AM") to 24-hour format for easier Date object creation
-    const [timePart, ampmPart] = selectedTime.split(" ");
-    let [hours, minutes] = timePart.split(":").map(Number);
-    if (ampmPart === "PM" && hours !== 12) hours += 12;
-    if (ampmPart === "AM" && hours === 12) hours = 0;
-    const startDateTime = new Date(selectedDate);
-    startDateTime.setHours(hours, minutes, 0, 0);
-    // Calculate end time in minutes from start of day
-    const startMinutesOfDay = hours * 60 + minutes;
-    let durationMinutes = 0;
-    if (selectedDuration.includes("hour")) {
-      durationMinutes = Number.parseFloat(selectedDuration.replace(/[^\d.]/g, "")) * 60;
-    } else if (selectedDuration.includes("minute")) {
-      durationMinutes = Number.parseInt(selectedDuration.replace(/[^\d]/g, ""));
+    try {
+      await addBooking({
+        resourceId: selectedResource.id,
+        startTime: proposedStart.toISOString(),
+        endTime: proposedEnd.toISOString(),
+        status: "confirmed",
+        purpose: purpose.trim() ? purpose.trim() : undefined,
+      })
+      alert("Booking confirmed!")
+      setStep(1)
+      setSelectedType("")
+      setSelectedResource(null)
+      setSelectedDate(undefined)
+      setSelectedTime("")
+      setSelectedDuration("")
+      setPurpose("")
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Could not complete booking.")
     }
-    const endMinutesOfDay = startMinutesOfDay + durationMinutes;
-    const endDateTime = new Date(selectedDate);
-    endDateTime.setHours(Math.floor(endMinutesOfDay / 60), endMinutesOfDay % 60, 0, 0);
-    // Handle bookings that cross midnight
-    if (endDateTime < startDateTime) {
-      endDateTime.setDate(endDateTime.getDate() + 1);
-    }
-    addBooking({
-      userId: user.id,
-      resourceId: selectedResource.id,
-      startTime: startDateTime.toISOString(),
-      endTime: endDateTime.toISOString(),
-      status: "confirmed",
-    });
-//     addBooking({
-//   userId: user.id,
-//   resourceId: selectedResource.id,
-//   resource: selectedResource,
-//   startTime: startDateTime.toISOString(),
-//   endTime: endDateTime.toISOString(),
-//   status: "confirmed",
-//   type: selectedResource.type, // must be a string like 'meeting_room'
-// });
-
-    alert("Booking confirmed!");
-    setStep(1);
-    setSelectedType("");
-    setSelectedResource(null);
-    setSelectedDate(undefined);
-    setSelectedTime("");
-    setSelectedDuration("");
-    setPurpose("");
   }
 
   // Calculate display end time for the summary
   const displayEndTime = selectedTime && selectedDuration ? calculateDisplayEndTime(selectedTime, selectedDuration) : ""
 
-  // Determine if the selected time slot is available
   const isTimeSlotAvailable = useMemo(() => {
     if (!selectedResource || !selectedDate || !selectedTime || !selectedDuration) return false
-    return checkTimeSlotAvailability(selectedResource.id, selectedDate, selectedTime, selectedDuration, [])
-  }, [selectedResource, selectedDate, selectedTime, selectedDuration, checkTimeSlotAvailability])
+    return !hasConflict
+  }, [selectedResource, selectedDate, selectedTime, selectedDuration, hasConflict])
 
   // Filter time slots so that for today, only future slots (at least 30 minutes from now) are available
   const getFilteredTimeSlots = () => {
