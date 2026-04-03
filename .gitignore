@@ -1,0 +1,46 @@
+# Node.js dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+
+# Production
+*.log
+
+# Environment variables
+.env
+.env.*.local
+.env.local
+
+# Prisma local database files
+prisma/*.db
+prisma/*.db-journal
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Editor folders
+.vscode/
+.idea/
+
+# OS-specific
+*.swp
+*.swo
+
+# pnpm and npm
+pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Coverage & test
+coverage/
+*.lcov
+
+# Optional
+*.tgz
+*.zip
+
