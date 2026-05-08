@@ -14,6 +14,7 @@ interface User {
   joinDate: string
   totalBookings: number
   status: string
+  isAdmin: boolean
 }
 
 interface AuthContextType {
@@ -41,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         joinDate: (session.user as any).joinDate || new Date().toISOString().split("T")[0],
         totalBookings: (session.user as any).totalBookings || 0,
         status: (session.user as any).status || "active",
+        isAdmin: Boolean((session.user as any).isAdmin),
       }
     : null
 

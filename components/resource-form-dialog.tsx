@@ -19,103 +19,102 @@ import type { Resource } from "@/contexts/admin-data-context"
 interface ResourceFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  resource?: Resource // Optional, for editing existing resource
-  onSave: (resource: Omit<Resource, "id" | "status"> | Resource) => void
+  /** Omit for “add”; include with `id` for edit */
+  resource?: Resource | null
+  onSave: (resource: Omit<Resource, "id"> | Resource) => void | Promise<void>
 }
 
 export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: ResourceFormDialogProps) {
-  const [name, setName] = useState(resource?.name || "")
-  const [type, setType] = useState<Resource["type"]>(resource?.type || "meeting_room")
-  const [capacity, setCapacity] = useState(resource?.capacity || 1)
-  const [location, setLocation] = useState(resource?.location || "")
-  const [description, setDescription] = useState(resource?.description || "")
-  const [status, setStatus] = useState<Resource["status"]>(resource?.status || "available")
+  const isEdit = Boolean(resource?.id)
+  const [name, setName] = useState("")
+  const [type, setType] = useState("meeting_room")
+  const [capacity, setCapacity] = useState(1)
+  const [location, setLocation] = useState("")
+  const [description, setDescription] = useState("")
+  const [amenitiesText, setAmenitiesText] = useState("")
+  const [status, setStatus] = useState("available")
+  const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (resource) {
+    if (!open) return
+    setError("")
+    if (resource?.id) {
       setName(resource.name)
       setType(resource.type)
       setCapacity(resource.capacity)
       setLocation(resource.location)
       setDescription(resource.description || "")
+      setAmenitiesText((resource.amenities ?? []).join(", "))
       setStatus(resource.status)
     } else {
-      // Reset form for new resource
       setName("")
       setType("meeting_room")
       setCapacity(1)
       setLocation("")
       setDescription("")
+      setAmenitiesText("")
       setStatus("available")
     }
   }, [resource, open])
 
-  const handleSubmit = async () => {
-  const resourceData = {
-    name,
-    type,
-    capacity,
-    location,
-    description,
-    status,
-  }
-
-  try {
-    if (resource) {
-      // EDITING existing resource — send PATCH request
-      const response = await fetch(`/api/resources/${resource.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(resourceData),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        console.error("Update failed:", error)
-        return
-      }
-
-      const updatedResource = await response.json()
-      onSave(updatedResource) // pass back updated object
-    } else {
-      // ADDING new resource — send POST request
-      const response = await fetch(`/api/resources`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(resourceData),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        console.error("Create failed:", error)
-        return
-      }
-
-      const newResource = await response.json()
-      onSave(newResource)
+  async function handleSubmit() {
+    setError("")
+    const n = name.trim()
+    const loc = location.trim()
+    if (!n) {
+      setError("Name is required.")
+      return
+    }
+    if (!loc) {
+      setError("Location is required.")
+      return
+    }
+    const cap = Number(capacity)
+    if (!Number.isFinite(cap) || cap < 1) {
+      setError("Capacity must be at least 1.")
+      return
     }
 
-    onOpenChange(false) // close the dialog
-  } catch (err) {
-    console.error("Network error:", err)
-  }
-}
+    const payload: Omit<Resource, "id"> = {
+      name: n,
+      type,
+      capacity: Math.floor(cap),
+      location: loc,
+      description: description.trim(),
+      status,
+      amenities: amenitiesText
+        .split(",")
+        .map((x) => x.trim())
+        .filter(Boolean),
+    }
 
+    setSaving(true)
+    try {
+      if (isEdit && resource?.id) {
+        await Promise.resolve(onSave({ ...payload, id: resource.id } as Resource))
+      } else {
+        await Promise.resolve(onSave(payload))
+      }
+      onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong.")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>{resource ? "Edit Resource" : "Add New Resource"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Resource" : "Add New Resource"}</DialogTitle>
           <DialogDescription>
-            {resource ? "Make changes to the resource details here." : "Fill in the details for the new resource."}
+            {isEdit ? "Update resource details." : "Create a bookable resource."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {error && <p className="text-sm text-red-600">{error}</p>}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="name" className="text-right">
               Name
@@ -126,7 +125,7 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
             <Label htmlFor="type" className="text-right">
               Type
             </Label>
-            <Select value={type} onValueChange={(value: Resource["type"]) => setType(value)}>
+            <Select value={type} onValueChange={setType}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select a type" />
               </SelectTrigger>
@@ -144,8 +143,9 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
             <Input
               id="capacity"
               type="number"
+              min={1}
               value={capacity}
-              onChange={(e) => setCapacity(Number.parseInt(e.target.value))}
+              onChange={(e) => setCapacity(Number.parseInt(e.target.value, 10) || 1)}
               className="col-span-3"
             />
           </div>
@@ -153,12 +153,7 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
             <Label htmlFor="location" className="text-right">
               Location
             </Label>
-            <Input
-              id="location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="col-span-3"
-            />
+            <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} className="col-span-3" />
           </div>
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="description" className="text-right">
@@ -175,7 +170,7 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
             <Label htmlFor="status" className="text-right">
               Status
             </Label>
-            <Select value={status} onValueChange={(value: Resource["status"]) => setStatus(value)}>
+            <Select value={status} onValueChange={setStatus}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select a status" />
               </SelectTrigger>
@@ -186,10 +181,25 @@ export function ResourceFormDialog({ open, onOpenChange, resource, onSave }: Res
               </SelectContent>
             </Select>
           </div>
+          <div className="grid grid-cols-4 items-center gap-4">
+            <Label htmlFor="amenities" className="text-right">
+              Amenities
+            </Label>
+            <Input
+              id="amenities"
+              value={amenitiesText}
+              onChange={(e) => setAmenitiesText(e.target.value)}
+              placeholder="Projector, Whiteboard"
+              className="col-span-3"
+            />
+          </div>
         </div>
         <DialogFooter>
-          <Button type="submit" onClick={handleSubmit}>
-            {resource ? "Save changes" : "Add Resource"}
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Add resource"}
           </Button>
         </DialogFooter>
       </DialogContent>

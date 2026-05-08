@@ -1,4 +1,4 @@
-import type { DefaultSession, DefaultUser } from "next-auth"
+import type { DefaultSession } from "next-auth"
 import type { DefaultJWT } from "next-auth/jwt"
 
 declare module "next-auth" {
@@ -11,48 +11,22 @@ declare module "next-auth" {
       joinDate: string
       totalBookings: number
       status: string
-      image?: string | null  // ✅ Add this
+      isAdmin: boolean
+      image?: string | null
     } & DefaultSession["user"]
   }
+}
 
-  interface User extends DefaultUser {
+declare module "next-auth/jwt" {
+  interface JWT extends DefaultJWT {
+    id?: string
     company?: string
     department?: string
     phone?: string
     joinDate?: string
     totalBookings?: number
     status?: string
-    image?: string | null // ✅ Add this
-  }
-}
-
-declare module "next-auth/jwt" {
-  interface JWT extends DefaultJWT {
-    id: string
-    company: string
-    department: string
-    phone: string
-    joinDate: string
-    totalBookings: number
-    status: string
-    image?: string | null // ✅ Add this (if you use it in callbacks)
-  }
-}
-import NextAuth from "next-auth"
-
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string
-      name?: string | null
-      email?: string | null
-      image?: string | null
-      company: string
-      department: string
-      phone: string
-      joinDate: string
-      totalBookings: number
-      status: string
-    }
+    isAdmin?: boolean
+    image?: string | null
   }
 }

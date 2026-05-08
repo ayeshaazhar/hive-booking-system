@@ -2,6 +2,8 @@ import type { NextAuthOptions } from "next-auth"
 import GoogleProvider from "next-auth/providers/google"
 import GitHubProvider from "next-auth/providers/github"
 import { prisma } from "./prisma"
+import { isAdminEmail } from "./admin-auth"
+import { getOrCreateDefaultOrganization } from "./organization"
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -19,14 +21,19 @@ export const authOptions: NextAuthOptions = {
     if (account?.provider === "google" || account?.provider === "github") {
       // ✅ Sync the user to the database
       try {
+        const org = await getOrCreateDefaultOrganization()
         await prisma.user.upsert({
           where: { email: user.email! },
           update: {
             name: user.name ?? "No Name",
+            organizationId: org.id,
+            isActive: true,
           },
           create: {
             name: user.name ?? "No Name",
             email: user.email!,
+            organizationId: org.id,
+            isActive: true,
           },
         })
       } catch (error) {
@@ -40,16 +47,10 @@ export const authOptions: NextAuthOptions = {
   },
     async jwt({ token, user }) {
       if (user) {
-        // Look up the user in the database by email
-        const dbUser = await prisma.user.findUnique({ where: { email: user.email! } });
-        if (dbUser) {
-          token.id = dbUser.id; // Use the database ID
-        }
-        token.email = user.email;
-        token.name = user.name;
-        token.picture = user.image;
+        token.email = user.email
+        token.name = user.name
+        token.picture = user.image
 
-        // Extract company from email domain
         const domain = user.email?.split("@")[1] || ""
         const commonProviders = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com"]
 
@@ -66,14 +67,35 @@ export const authOptions: NextAuthOptions = {
         token.totalBookings = 0
         token.status = "active"
       }
+
+      const email = typeof token.email === "string" ? token.email : undefined
+      if (email) {
+        const dbUser = await prisma.user.findUnique({ where: { email } })
+        if (dbUser) {
+          token.id = dbUser.id
+          token.isAdmin = dbUser.role === "admin" || isAdminEmail(dbUser.email)
+        } else {
+          token.isAdmin = isAdminEmail(email)
+        }
+      } else {
+        token.isAdmin = false
+      }
       return token
     },
     async session({ session, token }) {
       if (session.user && token.id) {
-        session.user.id = token.id as string;
-        console.log('SESSION CALLBACK:', { sessionUser: session.user, tokenId: token.id });
+        session.user.id = token.id as string
       }
-      return session;
+      if (session.user) {
+        session.user.isAdmin = Boolean(token.isAdmin)
+        session.user.company = (token.company as string) ?? session.user.company ?? ""
+        session.user.department = (token.department as string) ?? session.user.department ?? ""
+        session.user.phone = (token.phone as string) ?? session.user.phone ?? ""
+        session.user.joinDate = (token.joinDate as string) ?? session.user.joinDate ?? ""
+        session.user.totalBookings = (token.totalBookings as number) ?? 0
+        session.user.status = (token.status as string) ?? session.user.status ?? "active"
+      }
+      return session
     },
   },
   pages: {

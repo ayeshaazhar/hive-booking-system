@@ -18,8 +18,8 @@ import type { Member } from "@/contexts/admin-data-context"
 interface MemberFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  member?: Member // Optional, for editing existing member
-  onSave: (member: Omit<Member, "id" | "joinDate" | "totalBookings" | "status" | "role"> | Member) => void
+  member?: Member
+  onSave: (member: Omit<Member, "id" | "joinDate" | "totalBookings"> | Member) => void | Promise<void>
 }
 
 export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberFormDialogProps) {
@@ -28,8 +28,8 @@ export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberF
   const [company, setCompany] = useState(member?.company || "")
   const [department, setDepartment] = useState(member?.department || "")
   const [phone, setPhone] = useState(member?.phone || "")
-  const [role, setRole] = useState<Member["role"]>(member?.role || "member")
-  const [status, setStatus] = useState<Member["status"]>(member?.status || "active")
+  const [role, setRole] = useState<string>(member?.role || "member")
+  const [status, setStatus] = useState<string>(member?.status || "active")
 
   useEffect(() => {
     if (member) {
@@ -52,25 +52,37 @@ export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberF
     }
   }, [member, open])
 
-  const handleSubmit = () => {
+  const [error, setError] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const handleSubmit = async () => {
+    setError("")
+    if (!name.trim() || !email.trim()) {
+      setError("Name and email are required.")
+      return
+    }
     const memberData = {
-      name,
-      email,
-      company,
-      department,
-      phone,
+      name: name.trim(),
+      email: email.trim(),
+      company: company.trim(),
+      department: department.trim(),
+      phone: phone.trim(),
       role,
       status,
     }
-
-    if (member) {
-      // Editing existing member
-      onSave({ ...member, ...memberData })
-    } else {
-      // Adding new member
-      onSave(memberData)
+    setSaving(true)
+    try {
+      if (member?.id) {
+        await Promise.resolve(onSave({ ...member, ...memberData }))
+      } else {
+        await Promise.resolve(onSave(memberData as Omit<Member, "id" | "joinDate" | "totalBookings">))
+      }
+      onOpenChange(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save member.")
+    } finally {
+      setSaving(false)
     }
-    onOpenChange(false)
   }
 
   return (
@@ -83,6 +95,7 @@ export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberF
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {error && <p className="text-sm text-red-600 col-span-4">{error}</p>}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label htmlFor="name" className="text-right">
               Name
@@ -128,7 +141,7 @@ export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberF
             <Label htmlFor="role" className="text-right">
               Role
             </Label>
-            <Select value={role} onValueChange={(value: Member["role"]) => setRole(value)}>
+            <Select value={role} onValueChange={(value) => setRole(value)}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
@@ -142,7 +155,7 @@ export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberF
             <Label htmlFor="status" className="text-right">
               Status
             </Label>
-            <Select value={status} onValueChange={(value: Member["status"]) => setStatus(value)}>
+            <Select value={status} onValueChange={(value) => setStatus(value)}>
               <SelectTrigger className="col-span-3">
                 <SelectValue placeholder="Select a status" />
               </SelectTrigger>
@@ -154,9 +167,12 @@ export function MemberFormDialog({ open, onOpenChange, member, onSave }: MemberF
             </Select>
           </div>
         </div>
-        <DialogFooter>
-          <Button type="submit" onClick={handleSubmit}>
-            {member ? "Save changes" : "Add Member"}
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={() => void handleSubmit()} disabled={saving}>
+            {saving ? "Saving…" : member ? "Save changes" : "Add Member"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/contexts/auth-context"
@@ -27,7 +27,13 @@ const navigation = [
 export function Navigation() {
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [notifications, setNotifications] = useState<
+    { id: string; title: string; message: string; createdAt: string; isRead: boolean }[]
+  >([])
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
   const { user, logout } = useAuth()
+
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.isRead).length, [notifications])
 
   const handleLogout = async () => {
     await logout()
@@ -43,6 +49,42 @@ export function Navigation() {
 
   if (!user) return null
 
+  useEffect(() => {
+    let alive = true
+    const load = async () => {
+      setLoadingNotifications(true)
+      try {
+        const res = await fetch("/api/notifications")
+        if (!res.ok) return
+        const data = await res.json()
+        if (alive && Array.isArray(data)) {
+          setNotifications(
+            data.map((n: any) => ({
+              id: String(n.id),
+              title: String(n.title ?? "Notification"),
+              message: String(n.message ?? ""),
+              createdAt: String(n.createdAt ?? new Date().toISOString()),
+              isRead: Boolean(n.isRead),
+            })),
+          )
+        }
+      } finally {
+        if (alive) setLoadingNotifications(false)
+      }
+    }
+    void load()
+    const i = setInterval(() => void load(), 30_000)
+    return () => {
+      alive = false
+      clearInterval(i)
+    }
+  }, [])
+
+  const markRead = async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)))
+    await fetch(`/api/notifications/${id}`, { method: "PATCH" })
+  }
+
   return (
     <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,7 +99,7 @@ export function Navigation() {
 
 <div className="flex items-center">
   <Link href="/" className="flex items-center space-x-2">
-    <img src="/favicon.ico" alt="The Hive Logo" className="h-9 w-auto" />
+    <img src="/favicon-removebg-preview (1).png" alt="The Hive Logo" className="h-9 w-auto" />
 
 
     {/* <Building2 className="h-8 w-8 text-orange-500" /> */}
@@ -89,10 +131,39 @@ export function Navigation() {
 
           {/* User Menu */}
           <div className="flex items-center space-x-4">
-            <Button variant="ghost" size="sm" className="relative">
-              <Bell className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs">3</Badge>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="relative" aria-label="Notifications">
+                  <Bell className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <Badge className="absolute -top-1 -right-1 h-5 min-w-5 px-1 flex items-center justify-center text-xs">
+                      {unreadCount > 9 ? "9+" : unreadCount}
+                    </Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <div className="px-2 py-1.5 text-sm font-medium">Notifications</div>
+                <DropdownMenuSeparator />
+                {loadingNotifications && <div className="px-2 py-2 text-sm text-muted-foreground">Loading...</div>}
+                {!loadingNotifications && notifications.length === 0 && (
+                  <div className="px-2 py-2 text-sm text-muted-foreground">No notifications</div>
+                )}
+                {!loadingNotifications &&
+                  notifications.slice(0, 8).map((n) => (
+                    <DropdownMenuItem key={n.id} onClick={() => void markRead(n.id)} className="py-2">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{n.title}</span>
+                          {!n.isRead && <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                        <p className="text-[10px] text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</p>
+                      </div>
+                    </DropdownMenuItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -117,12 +188,14 @@ export function Navigation() {
                     <span>Profile</span>
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/admin">
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Admin Panel</span>
-                  </Link>
-                </DropdownMenuItem>
+                {user.isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/admin">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Admin</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />

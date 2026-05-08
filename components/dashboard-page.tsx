@@ -52,6 +52,36 @@ export default function DashboardPage() {
   const { user } = useAuth()
   const { bookings, isLoaded: bookingsLoaded } = useBooking()
   const { resources, isLoaded: resourcesLoaded } = useAdminData()
+  const [notifications, setNotifications] = React.useState<
+    { id: string; title: string; message: string; createdAt: string; isRead: boolean }[]
+  >([])
+
+  React.useEffect(() => {
+    if (!user) return
+    let alive = true
+    const loadNotifications = async () => {
+      const res = await fetch("/api/notifications")
+      if (!res.ok) return
+      const data = await res.json()
+      if (alive && Array.isArray(data)) {
+        setNotifications(
+          data.map((n: any) => ({
+            id: String(n.id),
+            title: String(n.title ?? "Notification"),
+            message: String(n.message ?? ""),
+            createdAt: String(n.createdAt ?? new Date().toISOString()),
+            isRead: Boolean(n.isRead),
+          })),
+        )
+      }
+    }
+    void loadNotifications()
+    const id = setInterval(() => void loadNotifications(), 30_000)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [user])
 
   if (!user) {
     return (
@@ -214,6 +244,55 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent notifications</CardTitle>
+              <CardDescription>Updates about your bookings</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {notifications.length === 0 ? (
+                <p className="text-sm text-gray-500">No notifications yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {notifications.slice(0, 5).map((n) => (
+                    <div key={n.id} className="border rounded-md p-3">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{n.title}</p>
+                        {!n.isRead && <span className="h-2 w-2 rounded-full bg-orange-500 inline-block" />}
+                      </div>
+                      <p className="text-sm text-gray-600">{n.message}</p>
+                      <p className="text-xs text-gray-400 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Amenities available now</CardTitle>
+              <CardDescription>Across all resources</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {resources.flatMap((r) => r.amenities ?? []).length === 0 ? (
+                <p className="text-sm text-gray-500">No amenities listed yet.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(new Set(resources.flatMap((r) => r.amenities ?? [])))
+                    .sort()
+                    .map((amenity) => (
+                      <Badge key={amenity} variant="outline">
+                        {amenity}
+                      </Badge>
+                    ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </main>
       {/* <BookingDebug /> */}
     </div>

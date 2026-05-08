@@ -8,35 +8,103 @@ datasource db {
 }
 
 model User {
-  id         String    @id @default(cuid())
-  name       String
-  email      String    @unique
-  company    String?
-  department String?
-  phone      String?
-  bookings   Booking[]
+  id             String         @id @default(cuid())
+  name           String
+  email          String         @unique
+  company        String?
+  department     String?
+  phone          String?
+  role           String         @default("member")
+  isActive       Boolean        @default(true)
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  bookings       Booking[]
+  notifications  Notification[] @relation("NotificationRecipient")
+  auditLogs      BookingAuditLog[] @relation("BookingAuditActor")
 }
 
 model Resource {
-  id          String    @id @default(cuid())
-  name        String
-  type        String
-  location    String
-  capacity    Int
-  status      String    @default("available")
-  description String?
-  bookings    Booking[]
+  id             String            @id @default(cuid())
+  name           String
+  type           String
+  location       String
+  capacity       Int
+  status         String            @default("available")
+  description    String?
+  organizationId String?
+  organization   Organization?     @relation(fields: [organizationId], references: [id])
+  bookings       Booking[]
+  amenities      ResourceAmenity[]
 }
 
 model Booking {
-  id         String   @id @default(cuid())
-  user       User     @relation(fields: [userId], references: [id])
-  userId     String
-  resource   Resource @relation(fields: [resourceId], references: [id])
+  id             String           @id @default(cuid())
+  user           User             @relation(fields: [userId], references: [id])
+  userId         String
+  resource       Resource         @relation(fields: [resourceId], references: [id])
+  resourceId     String
+  organizationId String?
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  startTime      DateTime
+  endTime        DateTime
+  status         String           @default("pending")
+  purpose        String?
+  notes          String?
+  auditLogs      BookingAuditLog[]
+}
+
+model Organization {
+  id            String           @id @default(cuid())
+  name          String
+  slug          String           @unique
+  createdAt     DateTime         @default(now())
+  users         User[]
+  resources     Resource[]
+  bookings      Booking[]
+  notifications Notification[]
+  amenities     Amenity[]
+}
+
+model Amenity {
+  id             String            @id @default(cuid())
+  name           String
+  organizationId String?
+  organization   Organization?     @relation(fields: [organizationId], references: [id])
+  resources      ResourceAmenity[]
+
+  @@unique([name, organizationId])
+}
+
+model ResourceAmenity {
   resourceId String
-  startTime  DateTime
-  endTime    DateTime
-  status     String   @default("pending")
-  purpose    String?
-  notes      String?
+  amenityId  String
+  resource   Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  amenity    Amenity  @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+
+  @@id([resourceId, amenityId])
+}
+
+model Notification {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  recipientId    String?
+  recipient      User?         @relation("NotificationRecipient", fields: [recipientId], references: [id])
+  type           String
+  title          String
+  message        String
+  metadata       Json?
+  isRead         Boolean       @default(false)
+  createdAt      DateTime      @default(now())
+}
+
+model BookingAuditLog {
+  id          String   @id @default(cuid())
+  bookingId   String
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  action      String
+  actorUserId String?
+  actorUser   User?    @relation("BookingAuditActor", fields: [actorUserId], references: [id])
+  snapshot    Json?
+  createdAt   DateTime @default(now())
 }
