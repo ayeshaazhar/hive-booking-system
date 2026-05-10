@@ -344,6 +344,7 @@ export function BookingSystem() {
                       alt={resource.name}
                       className="w-full h-full object-cover rounded-t-lg"
                     />
+                    
                   </div>
                   <CardHeader>
                     <div className="flex items-center justify-between">

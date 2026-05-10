@@ -13,8 +13,14 @@ export async function POST(req: NextRequest) {
   }
   const { company, department, phone } = await req.json()
   try {
+    const existing = await prisma.user.findFirst({
+      where: { email: { equals: session.user.email.trim(), mode: "insensitive" } },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
     const updated = await prisma.user.update({
-      where: { email: session.user.email },
+      where: { id: existing.id },
       data: {
         company,
         department,

@@ -52,9 +52,13 @@ export async function POST(req: NextRequest) {
   if (!actor) {
     return NextResponse.json({ error: "Admin user not found." }, { status: 404 })
   }
+  if (!actor.organizationId) {
+    return NextResponse.json({ error: "Admin has no organization assigned." }, { status: 400 })
+  }
+  const actorOrganizationId = actor.organizationId
 
   try {
-    const data = await req.json()
+    const data = (await req.json()) as Record<string, unknown>
     const name = typeof data.name === "string" ? data.name.trim() : ""
     const type = typeof data.type === "string" ? data.type.trim() : ""
     const location = typeof data.location === "string" ? data.location.trim() : ""
@@ -66,7 +70,10 @@ export async function POST(req: NextRequest) {
         ? data.description.trim()
         : undefined
     const amenities = Array.isArray(data.amenities)
-      ? data.amenities.filter((a): a is string => typeof a === "string").map((a) => a.trim()).filter(Boolean)
+      ? data.amenities
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter(Boolean)
       : []
 
     if (!name || !type || !location) {
@@ -97,7 +104,7 @@ export async function POST(req: NextRequest) {
           capacity: Math.floor(capacity),
           status,
           description,
-          organizationId: actor.organizationId,
+          organizationId: actorOrganizationId,
         },
       })
 
@@ -106,12 +113,12 @@ export async function POST(req: NextRequest) {
           where: {
             name_organizationId: {
               name: amenityName,
-              organizationId: actor.organizationId,
+              organizationId: actorOrganizationId,
             },
           },
           create: {
             name: amenityName,
-            organizationId: actor.organizationId,
+            organizationId: actorOrganizationId,
           },
           update: {},
         })

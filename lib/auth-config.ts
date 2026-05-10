@@ -70,10 +70,17 @@ export const authOptions: NextAuthOptions = {
 
       const email = typeof token.email === "string" ? token.email : undefined
       if (email) {
-        const dbUser = await prisma.user.findUnique({ where: { email } })
+        const dbUser = await prisma.user.findFirst({
+          where: { email: { equals: email.trim(), mode: "insensitive" } },
+        })
         if (dbUser) {
           token.id = dbUser.id
           token.isAdmin = dbUser.role === "admin" || isAdminEmail(dbUser.email)
+          // Keep JWT in sync with DB so profile edits show after session.update()
+          token.company = dbUser.company ?? token.company ?? ""
+          token.department = dbUser.department ?? token.department ?? "General"
+          token.phone = dbUser.phone ?? token.phone ?? ""
+          token.status = dbUser.isActive ? "active" : "inactive"
         } else {
           token.isAdmin = isAdminEmail(email)
         }

@@ -42,8 +42,8 @@ export default function ProfilePage() {
     )
   }
 
-  const handleSave = () => {
-    updateProfile({
+  const handleSave = async () => {
+    await updateProfile({
       company: editedProfile.company,
       department: editedProfile.department,
       phone: editedProfile.phone,
@@ -155,7 +155,25 @@ export default function ProfilePage() {
                     <CardDescription>Update your personal details</CardDescription>
                   </div>
                   {!isEditing ? (
-                    <Button onClick={() => setIsEditing(true)}>Edit</Button>
+                    <Button
+                      onClick={() => {
+                        setEditedProfile({
+                          id: user.id,
+                          name: user.name,
+                          email: user.email,
+                          company: user.company,
+                          department: user.department,
+                          phone: user.phone,
+                          joinDate: user.joinDate,
+                          totalBookings: user.totalBookings,
+                          status: user.status,
+                          isAdmin: user.isAdmin,
+                        })
+                        setIsEditing(true)
+                      }}
+                    >
+                      Edit
+                    </Button>
                   ) : (
                     <div className="space-x-2">
                       <Button variant="outline" onClick={handleCancel}>
