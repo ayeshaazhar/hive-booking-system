@@ -1,26 +1,25 @@
 # 🐝 Hive Booking System
 
-A modern web-based booking and resource management system designed to streamline room reservations, member management, and administrative control for organizations.
-
----
+A full-stack workspace and resource booking platform built with
+Next.js, PostgreSQL, and Prisma.
 
 ## 🚀 Features
 
-- 📅 Room Booking System – Reserve meeting rooms and spaces easily  
-- 👥 User Management – Role-based access (Admin, Member, etc.)  
-- 🏢 Resource Tracking – Manage available rooms, seats, and facilities  
-- 🔐 Authentication System – Secure login and access control  
-- 📊 Dashboard – Overview of bookings, usage, and stats  
-- 💾 Database Integration – PostgreSQL + Prisma  
-- 📱 Responsive UI – Works on desktop and mobile devices  
-
----
+- 📅 Meeting room and workspace booking
+- 👥 Role-based user management
+- 🏢 Organization and resource management
+- 🔐 Authentication and access control
+- 📊 Booking and resource dashboard
+- 🔔 User notifications
+- 🧾 Booking history and audit logs
+- 🏷️ Resource amenities management
+- 📱 Responsive design for desktop and mobile
+- 💾 PostgreSQL database with Prisma ORM
 
 ## 🛠️ Tech Stack
 
-- **Frontend:** Next.js / React  
-- **Backend:** Node.js  
-- **Database:** PostgreSQL  
-- **ORM:** Prisma  
-- **Styling:** Tailwind CSS  
-- **Other:** Framer Motion, API Routes  
+- **Frontend:** Next.js, React, Tailwind CSS
+- **Backend:** Next.js / Node.js API routes
+- **Database:** PostgreSQL
+- **ORM:** Prisma
+- **Deployment:** Vercel
